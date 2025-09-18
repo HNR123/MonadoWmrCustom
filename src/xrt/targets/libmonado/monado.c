@@ -56,8 +56,10 @@ enum role_enum
 	ROLE_LEFT,
 	ROLE_RIGHT,
 	ROLE_GAMEPAD,
-	ROLE_HAND_LEFT,
-	ROLE_HAND_RIGHT,
+	ROLE_HAND_UNOBSTRUCTED_LEFT,
+	ROLE_HAND_UNOBSTRUCTED_RIGHT,
+	ROLE_HAND_CONFORMING_LEFT,
+	ROLE_HAND_CONFORMING_RIGHT,
 };
 
 #define CHECK_NOT_NULL(ARG)                                                                                            \
@@ -80,6 +82,14 @@ enum role_enum
 	do {                                                                                                           \
 		if (INDEX >= root->clients.id_count) {                                                                 \
 			PE("Invalid client index, too large (%u)", INDEX);                                             \
+			return MND_ERROR_INVALID_VALUE;                                                                \
+		}                                                                                                      \
+	} while (false)
+
+#define CHECK_DEVICE_INDEX(INDEX)                                                                                      \
+	do {                                                                                                           \
+		if (INDEX >= root->ipc_c.ism->isdev_count) {                                                           \
+			PE("Invalid device index (%u)", INDEX);                                                        \
 			return MND_ERROR_INVALID_VALUE;                                                                \
 		}                                                                                                      \
 	} while (false)
@@ -309,8 +319,9 @@ mnd_root_get_device_info_bool(mnd_root_t *root, uint32_t device_index, mnd_prope
 	const struct ipc_shared_device *shared_device = &root->ipc_c.ism->isdevs[device_index];
 
 	switch (prop) {
-	case MND_PROPERTY_SUPPORTS_POSITION_BOOL: *out_bool = shared_device->position_tracking_supported; break;
-	case MND_PROPERTY_SUPPORTS_ORIENTATION_BOOL: *out_bool = shared_device->orientation_tracking_supported; break;
+	case MND_PROPERTY_SUPPORTS_POSITION_BOOL: *out_bool = shared_device->supported.position_tracking; break;
+	case MND_PROPERTY_SUPPORTS_ORIENTATION_BOOL: *out_bool = shared_device->supported.orientation_tracking; break;
+	case MND_PROPERTY_SUPPORTS_BRIGHTNESS_BOOL: *out_bool = shared_device->supported.brightness_control; break;
 	default: PE("Is not a valid boolean property (%u)", prop); return MND_ERROR_INVALID_PROPERTY;
 	}
 
@@ -430,8 +441,13 @@ mnd_root_get_device_from_role(mnd_root_t *root, const char *role_name, int32_t *
 	TO_ENUM("left", ROLE_LEFT)
 	TO_ENUM("right", ROLE_RIGHT)
 	TO_ENUM("gamepad", ROLE_GAMEPAD)
-	TO_ENUM("hand-tracking-left", ROLE_HAND_LEFT)
-	TO_ENUM("hand-tracking-right", ROLE_HAND_RIGHT)
+	TO_ENUM("hand-tracking-unobstructed-left", ROLE_HAND_UNOBSTRUCTED_LEFT)
+	TO_ENUM("hand-tracking-unobstructed-right", ROLE_HAND_UNOBSTRUCTED_RIGHT)
+	TO_ENUM("hand-tracking-conforming-left", ROLE_HAND_CONFORMING_LEFT)
+	TO_ENUM("hand-tracking-conforming-right", ROLE_HAND_CONFORMING_RIGHT)
+	//! *DEPRECATED** following roles name are deprecated, to be removed in the next major version
+	TO_ENUM("hand-tracking-left", ROLE_HAND_UNOBSTRUCTED_LEFT)
+	TO_ENUM("hand-tracking-right", ROLE_HAND_UNOBSTRUCTED_RIGHT)
 	{
 		PE("Invalid role name (%s)", role_name);
 		return MND_ERROR_INVALID_VALUE;
@@ -441,8 +457,15 @@ mnd_root_get_device_from_role(mnd_root_t *root, const char *role_name, int32_t *
 	switch (role) {
 	case ROLE_HEAD: *out_index = root->ipc_c.ism->roles.head; return MND_SUCCESS;
 	case ROLE_EYES: *out_index = root->ipc_c.ism->roles.eyes; return MND_SUCCESS;
-	case ROLE_HAND_LEFT: *out_index = root->ipc_c.ism->roles.hand_tracking.left; return MND_SUCCESS;
-	case ROLE_HAND_RIGHT: *out_index = root->ipc_c.ism->roles.hand_tracking.right; return MND_SUCCESS;
+#define CASE_ROLE_HAND(UC_SRC, SRC)                                                                                    \
+	case ROLE_HAND_##UC_SRC##_LEFT: *out_index = root->ipc_c.ism->roles.hand_tracking.SRC.left;                    \
+	    return MND_SUCCESS;                                                                                        \
+	case ROLE_HAND_##UC_SRC##_RIGHT:                                                                               \
+		*out_index = root->ipc_c.ism->roles.hand_tracking.SRC.right;                                           \
+		return MND_SUCCESS;
+		CASE_ROLE_HAND(UNOBSTRUCTED, unobstructed)
+		CASE_ROLE_HAND(CONFORMING, conforming)
+#undef CASE_ROLE_HAND
 	case ROLE_LEFT:
 	case ROLE_RIGHT:
 	case ROLE_GAMEPAD: break;
@@ -574,12 +597,55 @@ mnd_root_get_device_battery_status(
 
 	const struct ipc_shared_device *shared_device = &root->ipc_c.ism->isdevs[device_index];
 
-	if (!shared_device->battery_status_supported) {
+	if (!shared_device->supported.battery_status) {
 		return MND_ERROR_OPERATION_FAILED;
 	}
 
 	xrt_result_t xret =
 	    ipc_call_device_get_battery_status(&root->ipc_c, device_index, out_present, out_charging, out_charge);
+	switch (xret) {
+	case XRT_SUCCESS: return MND_SUCCESS;
+	case XRT_ERROR_IPC_FAILURE: PE("Connection error!"); return MND_ERROR_OPERATION_FAILED;
+	default: PE("Internal error, shouldn't get here"); return MND_ERROR_OPERATION_FAILED;
+	}
+}
+
+mnd_result_t
+mnd_root_get_device_brightness(mnd_root_t *root, uint32_t device_index, float *out_brightness)
+{
+	CHECK_NOT_NULL(root);
+	CHECK_DEVICE_INDEX(device_index);
+	CHECK_NOT_NULL(out_brightness);
+
+	const struct ipc_shared_device *shared_device = &root->ipc_c.ism->isdevs[device_index];
+
+	if (!shared_device->supported.brightness_control) {
+		PE("device_get_brightness unsupported\n");
+		return MND_ERROR_UNSUPPORTED_OPERATION;
+	}
+
+	xrt_result_t xret = ipc_call_device_get_brightness(&root->ipc_c, device_index, out_brightness);
+	switch (xret) {
+	case XRT_SUCCESS: return MND_SUCCESS;
+	case XRT_ERROR_IPC_FAILURE: PE("Connection error!"); return MND_ERROR_OPERATION_FAILED;
+	default: PE("Internal error, shouldn't get here"); return MND_ERROR_OPERATION_FAILED;
+	}
+}
+
+mnd_result_t
+mnd_root_set_device_brightness(mnd_root_t *root, uint32_t device_index, float brightness, bool relative)
+{
+	CHECK_NOT_NULL(root);
+	CHECK_DEVICE_INDEX(device_index);
+
+	const struct ipc_shared_device *shared_device = &root->ipc_c.ism->isdevs[device_index];
+
+	if (!shared_device->supported.brightness_control) {
+		PE("device_set_brightness unsupported\n");
+		return MND_ERROR_UNSUPPORTED_OPERATION;
+	}
+
+	xrt_result_t xret = ipc_call_device_set_brightness(&root->ipc_c, device_index, brightness, relative);
 	switch (xret) {
 	case XRT_SUCCESS: return MND_SUCCESS;
 	case XRT_ERROR_IPC_FAILURE: PE("Connection error!"); return MND_ERROR_OPERATION_FAILED;

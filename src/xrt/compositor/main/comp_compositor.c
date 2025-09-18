@@ -1,4 +1,5 @@
 // Copyright 2019-2024, Collabora, Ltd.
+// Copyright 2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -387,14 +388,10 @@ compositor_destroy(struct xrt_compositor *xc)
 	u_var_remove_root(c);
 
 	// Destroy any Vulkan resources, even if not used.
-	for (uint32_t i = 0; i < ARRAY_SIZE(c->scratch.views); i++) {
-		comp_scratch_single_images_free(&c->scratch.views[i], &c->base.vk);
-	}
+	chl_scratch_free_resources(&c->scratch, &c->nr);
 
 	// Destroy the scratch images fully, we initialized all of them.
-	for (uint32_t i = 0; i < ARRAY_SIZE(c->scratch.views); i++) {
-		comp_scratch_single_images_destroy(&c->scratch.views[i]);
-	}
+	chl_scratch_fini(&c->scratch);
 
 	// Make sure we are not holding onto any swapchains.
 	u_swapchain_debug_destroy(&c->debug.sc);
@@ -573,6 +570,12 @@ static const char *optional_device_extensions[] = {
 #error "Need port!"
 #endif
 
+#ifdef VK_KHR_present_id
+    VK_KHR_PRESENT_ID_EXTENSION_NAME,
+#endif
+#ifdef VK_KHR_present_wait
+    VK_KHR_PRESENT_WAIT_EXTENSION_NAME,
+#endif
 #ifdef VK_KHR_format_feature_flags2
     VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME,
 #endif
@@ -756,6 +759,7 @@ const struct comp_target_factory *ctfs[] = {
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
     &comp_target_factory_vk_display,
 #endif
+    &comp_target_factory_debug_image,
 };
 
 static void
@@ -1021,9 +1025,7 @@ comp_main_create_system_compositor(struct xrt_device *xdev,
 	u_swapchain_debug_init(&c->debug.sc);
 
 	// Init these before the renderer, not all might be used.
-	for (uint32_t i = 0; i < ARRAY_SIZE(c->scratch.views); i++) {
-		comp_scratch_single_images_init(&c->scratch.views[i]);
-	}
+	chl_scratch_init(&c->scratch);
 
 	c->frame_interval_ns = c->settings.nominal_frame_interval_ns;
 
@@ -1147,7 +1149,7 @@ comp_main_create_system_compositor(struct xrt_device *xdev,
 	for (uint32_t i = 0; i < view_count; i++) {
 		char tmp[64] = {0};
 		snprintf(tmp, sizeof(tmp), "View[%u]", i);
-		u_var_add_native_images_debug(c, &c->scratch.views[i].unid, tmp);
+		u_var_add_native_images_debug(c, &c->scratch.views[i].cssi.unid, tmp);
 	}
 
 #ifdef XRT_OS_ANDROID

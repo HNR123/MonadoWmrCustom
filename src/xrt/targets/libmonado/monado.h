@@ -25,9 +25,9 @@ extern "C" {
 //! Major version of the API.
 #define MND_API_VERSION_MAJOR 1
 //! Minor version of the API.
-#define MND_API_VERSION_MINOR 4
+#define MND_API_VERSION_MINOR 5
 //! Patch version of the API.
-#define MND_API_VERSION_PATCH 0
+#define MND_API_VERSION_PATCH 1
 
 /*!
  * Result codes for operations, negative are errors, zero or positives are
@@ -46,6 +46,8 @@ typedef enum mnd_result
 	MND_ERROR_INVALID_PROPERTY = -6,
 	//! Supported in version 1.3 and above.
 	MND_ERROR_INVALID_OPERATION = -7,
+	//! Supported in version 1.5 and above.
+	MND_ERROR_UNSUPPORTED_OPERATION = -8,
 } mnd_result_t;
 
 /*!
@@ -78,6 +80,8 @@ typedef enum mnd_property
 	MND_PROPERTY_SUPPORTS_POSITION_BOOL = 3,
 	//! Supported in version 1.4.0 and above.
 	MND_PROPERTY_SUPPORTS_ORIENTATION_BOOL = 4,
+	//! Supported in version 1.5.0 and above.
+	MND_PROPERTY_SUPPORTS_BRIGHTNESS_BOOL = 5,
 } mnd_property_t;
 
 /*!
@@ -359,10 +363,22 @@ mnd_root_get_device_info(mnd_root_t *root, uint32_t device_index, uint32_t *out_
 /*!
  * Get the device index associated for a given role name.
  *
+ *
  * @param root           The libmonado state.
- * @param role_name      Name of the role, one-of: "head", "left", "right",
- *                       "gamepad", "eyes", "hand-tracking-left", and,
- *                       "hand-tracking-right":
+ * @param role_name      Name of the role. Possible values are:
+ *                       - "head"
+ *                       - "left"
+ *                       - "right"
+ *                       - "gamepad"
+ *                       - "eyes"
+ *                       - "hand-tracking-unobstructed-[left|right]"
+ *                       - "hand-tracking-conforming-[left|right]"
+ *
+ *                       **DEPRECATED**: The role names "hand-tracking-[left|right]"
+ *                       are deprecated as of v1.5. They now map to
+ *                       "hand-tracking-unobstructed-[left|right]" and are
+ *                       scheduled for removal in v2.0.
+ *
  * @param[out] out_index Pointer to value to populate with the device index
  *                       associated with given role name, -1 if not role is set.
  *
@@ -480,6 +496,35 @@ mnd_root_get_tracking_origin_name(mnd_root_t *root, uint32_t origin_id, const ch
 mnd_result_t
 mnd_root_get_device_battery_status(
     mnd_root_t *root, uint32_t device_index, bool *out_present, bool *out_charging, float *out_charge);
+
+/*!
+ * Get current brightness of a display device.
+ *
+ * @param root                 The libmonado state.
+ * @param device_index         Index of device to retrieve brightness from.
+ * @param[out] out_brightness  Pointer to value to populate with the current device brightness, where 0 is 0%, and 1 is
+ * 100%.
+ *
+ * @return MND_SUCCESS on success
+ */
+mnd_result_t
+mnd_root_get_device_brightness(mnd_root_t *root, uint32_t device_index, float *out_brightness);
+
+/*!
+ * @brief Set the display brightness.
+ *
+ * @param root                 The libmonado state.
+ * @param device_index         Index of device to retrieve battery info from.
+ * @param[in] brightness       Desired display brightness, usually between 0 and 1. Some devices may
+ *                             allow exceeding 1 if the supported range exceeds 100%, but it will be clamped to
+ *                             the supported range.
+ * @param[in] relative         Whether to add \a brightness to the current brightness, instead of overwriting
+ *                             the current brightness.
+ *
+ * @return MND_SUCCESS on success
+ */
+mnd_result_t
+mnd_root_set_device_brightness(mnd_root_t *root, uint32_t device_index, float brightness, bool relative);
 
 #ifdef __cplusplus
 }

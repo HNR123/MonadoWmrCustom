@@ -26,7 +26,7 @@ extern "C" {
     ((((major) & 0xffffULL) << 48) | (((minor) & 0xffffULL) << 32) | ((patch) & 0xffffffffULL))
 
 // OpenXR current version number.
-#define XR_CURRENT_API_VERSION XR_MAKE_VERSION(1, 1, 48)
+#define XR_CURRENT_API_VERSION XR_MAKE_VERSION(1, 1, 50)
 
 // OpenXR 1.0 version number
 #define XR_API_VERSION_1_0 XR_MAKE_VERSION(1, 0, XR_VERSION_PATCH(XR_CURRENT_API_VERSION))
@@ -255,8 +255,19 @@ typedef enum XrResult {
     XR_ERROR_SPACE_NETWORK_TIMEOUT_FB = -1000169002,
     XR_ERROR_SPACE_NETWORK_REQUEST_FAILED_FB = -1000169003,
     XR_ERROR_SPACE_CLOUD_STORAGE_DISABLED_FB = -1000169004,
+    XR_ERROR_SPACE_INSUFFICIENT_RESOURCES_META = -1000259000,
+    XR_ERROR_SPACE_STORAGE_AT_CAPACITY_META = -1000259001,
+    XR_ERROR_SPACE_INSUFFICIENT_VIEW_META = -1000259002,
+    XR_ERROR_SPACE_PERMISSION_INSUFFICIENT_META = -1000259003,
+    XR_ERROR_SPACE_RATE_LIMITED_META = -1000259004,
+    XR_ERROR_SPACE_TOO_DARK_META = -1000259005,
+    XR_ERROR_SPACE_TOO_BRIGHT_META = -1000259006,
     XR_ERROR_PASSTHROUGH_COLOR_LUT_BUFFER_SIZE_MISMATCH_META = -1000266000,
     XR_ENVIRONMENT_DEPTH_NOT_AVAILABLE_META = 1000291000,
+    XR_ERROR_RENDER_MODEL_ID_INVALID_EXT = -1000300000,
+    XR_ERROR_RENDER_MODEL_ASSET_UNAVAILABLE_EXT = -1000300001,
+    XR_ERROR_RENDER_MODEL_GLTF_EXTENSION_REQUIRED_EXT = -1000300002,
+    XR_ERROR_NOT_INTERACTION_RENDER_MODEL_EXT = -1000301000,
     XR_ERROR_HINT_ALREADY_SET_QCOM = -1000306000,
     XR_ERROR_NOT_AN_ANCHOR_HTC = -1000319000,
     XR_ERROR_SPATIAL_ENTITY_ID_INVALID_BD = -1000389000,
@@ -271,6 +282,12 @@ typedef enum XrResult {
     XR_ERROR_SCENE_CAPTURE_FAILURE_BD = -1000392000,
     XR_ERROR_SPACE_NOT_LOCATABLE_EXT = -1000429000,
     XR_ERROR_PLANE_DETECTION_PERMISSION_DENIED_EXT = -1000429001,
+    XR_ERROR_MISMATCHING_TRACKABLE_TYPE_ANDROID = -1000455000,
+    XR_ERROR_TRACKABLE_TYPE_NOT_SUPPORTED_ANDROID = -1000455001,
+    XR_ERROR_ANCHOR_ID_NOT_FOUND_ANDROID = -1000457000,
+    XR_ERROR_ANCHOR_ALREADY_PERSISTED_ANDROID = -1000457001,
+    XR_ERROR_ANCHOR_NOT_TRACKING_ANDROID = -1000457002,
+    XR_ERROR_PERSISTED_DATA_NOT_READY_ANDROID = -1000457003,
     XR_ERROR_FUTURE_PENDING_EXT = -1000469001,
     XR_ERROR_FUTURE_INVALID_EXT = -1000469002,
     XR_ERROR_SYSTEM_NOTIFICATION_PERMISSION_DENIED_ML = -1000473000,
@@ -283,6 +300,15 @@ typedef enum XrResult {
     XR_COLOCATION_DISCOVERY_ALREADY_ADVERTISING_META = 1000571003,
     XR_COLOCATION_DISCOVERY_ALREADY_DISCOVERING_META = 1000571004,
     XR_ERROR_SPACE_GROUP_NOT_FOUND_META = -1000572002,
+    XR_ERROR_ANCHOR_NOT_OWNED_BY_CALLER_ANDROID = -1000701000,
+    XR_ERROR_SPATIAL_CAPABILITY_UNSUPPORTED_EXT = -1000740001,
+    XR_ERROR_SPATIAL_ENTITY_ID_INVALID_EXT = -1000740002,
+    XR_ERROR_SPATIAL_BUFFER_ID_INVALID_EXT = -1000740003,
+    XR_ERROR_SPATIAL_COMPONENT_UNSUPPORTED_FOR_CAPABILITY_EXT = -1000740004,
+    XR_ERROR_SPATIAL_CAPABILITY_CONFIGURATION_INVALID_EXT = -1000740005,
+    XR_ERROR_SPATIAL_COMPONENT_NOT_ENABLED_EXT = -1000740006,
+    XR_ERROR_SPATIAL_PERSISTENCE_SCOPE_UNSUPPORTED_EXT = -1000763001,
+    XR_ERROR_SPATIAL_PERSISTENCE_SCOPE_INCOMPATIBLE_EXT = -1000781001,
     XR_ERROR_EXTENSION_DEPENDENCY_NOT_ENABLED_KHR = XR_ERROR_EXTENSION_DEPENDENCY_NOT_ENABLED,
     XR_ERROR_PERMISSION_INSUFFICIENT_KHR = XR_ERROR_PERMISSION_INSUFFICIENT,
     XR_RESULT_MAX_ENUM = 0x7FFFFFFF
@@ -617,6 +643,11 @@ typedef enum XrStructureType {
     XR_TYPE_SYSTEM_HEADSET_ID_PROPERTIES_META = 1000245000,
     XR_TYPE_RECOMMENDED_LAYER_RESOLUTION_META = 1000254000,
     XR_TYPE_RECOMMENDED_LAYER_RESOLUTION_GET_INFO_META = 1000254001,
+    XR_TYPE_SYSTEM_SPACE_PERSISTENCE_PROPERTIES_META = 1000259000,
+    XR_TYPE_SPACES_SAVE_INFO_META = 1000259001,
+    XR_TYPE_EVENT_DATA_SPACES_SAVE_RESULT_META = 1000259002,
+    XR_TYPE_SPACES_ERASE_INFO_META = 1000259003,
+    XR_TYPE_EVENT_DATA_SPACES_ERASE_RESULT_META = 1000259004,
     XR_TYPE_SYSTEM_PASSTHROUGH_COLOR_LUT_PROPERTIES_META = 1000266000,
     XR_TYPE_PASSTHROUGH_COLOR_LUT_CREATE_INFO_META = 1000266001,
     XR_TYPE_PASSTHROUGH_COLOR_LUT_UPDATE_INFO_META = 1000266002,
@@ -626,6 +657,9 @@ typedef enum XrStructureType {
     XR_TYPE_SPACE_TRIANGLE_MESH_META = 1000269002,
     XR_TYPE_SYSTEM_PROPERTIES_BODY_TRACKING_FULL_BODY_META = 1000274000,
     XR_TYPE_EVENT_DATA_PASSTHROUGH_LAYER_RESUMED_META = 1000282000,
+    XR_TYPE_BODY_TRACKING_CALIBRATION_INFO_META = 1000283002,
+    XR_TYPE_BODY_TRACKING_CALIBRATION_STATUS_META = 1000283003,
+    XR_TYPE_SYSTEM_PROPERTIES_BODY_TRACKING_CALIBRATION_META = 1000283004,
     XR_TYPE_SYSTEM_FACE_TRACKING_PROPERTIES2_FB = 1000287013,
     XR_TYPE_FACE_TRACKER_CREATE_INFO2_FB = 1000287014,
     XR_TYPE_FACE_EXPRESSION_INFO2_FB = 1000287015,
@@ -641,6 +675,21 @@ typedef enum XrStructureType {
     XR_TYPE_ENVIRONMENT_DEPTH_IMAGE_META = 1000291005,
     XR_TYPE_ENVIRONMENT_DEPTH_HAND_REMOVAL_SET_INFO_META = 1000291006,
     XR_TYPE_SYSTEM_ENVIRONMENT_DEPTH_PROPERTIES_META = 1000291007,
+    XR_TYPE_RENDER_MODEL_CREATE_INFO_EXT = 1000300000,
+    XR_TYPE_RENDER_MODEL_PROPERTIES_GET_INFO_EXT = 1000300001,
+    XR_TYPE_RENDER_MODEL_PROPERTIES_EXT = 1000300002,
+    XR_TYPE_RENDER_MODEL_SPACE_CREATE_INFO_EXT = 1000300003,
+    XR_TYPE_RENDER_MODEL_STATE_GET_INFO_EXT = 1000300004,
+    XR_TYPE_RENDER_MODEL_STATE_EXT = 1000300005,
+    XR_TYPE_RENDER_MODEL_ASSET_CREATE_INFO_EXT = 1000300006,
+    XR_TYPE_RENDER_MODEL_ASSET_DATA_GET_INFO_EXT = 1000300007,
+    XR_TYPE_RENDER_MODEL_ASSET_DATA_EXT = 1000300008,
+    XR_TYPE_RENDER_MODEL_ASSET_PROPERTIES_GET_INFO_EXT = 1000300009,
+    XR_TYPE_RENDER_MODEL_ASSET_PROPERTIES_EXT = 1000300010,
+    XR_TYPE_INTERACTION_RENDER_MODEL_IDS_ENUMERATE_INFO_EXT = 1000301000,
+    XR_TYPE_INTERACTION_RENDER_MODEL_SUBACTION_PATH_INFO_EXT = 1000301001,
+    XR_TYPE_EVENT_DATA_INTERACTION_RENDER_MODELS_CHANGED_EXT = 1000301002,
+    XR_TYPE_INTERACTION_RENDER_MODEL_TOP_LEVEL_USER_PATH_GET_INFO_EXT = 1000301003,
     XR_TYPE_PASSTHROUGH_CREATE_INFO_HTC = 1000317001,
     XR_TYPE_PASSTHROUGH_COLOR_HTC = 1000317002,
     XR_TYPE_PASSTHROUGH_MESH_TRANSFORM_INFO_HTC = 1000317003,
@@ -697,6 +746,9 @@ typedef enum XrStructureType {
     XR_TYPE_SYSTEM_SPATIAL_MESH_PROPERTIES_BD = 1000393000,
     XR_TYPE_SENSE_DATA_PROVIDER_CREATE_INFO_SPATIAL_MESH_BD = 1000393001,
     XR_TYPE_FUTURE_POLL_RESULT_PROGRESS_BD = 1000394001,
+    XR_TYPE_SYSTEM_SPATIAL_PLANE_PROPERTIES_BD = 1000396000,
+    XR_TYPE_SPATIAL_ENTITY_COMPONENT_DATA_PLANE_ORIENTATION_BD = 1000396001,
+    XR_TYPE_SENSE_DATA_FILTER_PLANE_ORIENTATION_BD = 1000396002,
     XR_TYPE_HAND_TRACKING_DATA_SOURCE_INFO_EXT = 1000428000,
     XR_TYPE_HAND_TRACKING_DATA_SOURCE_STATE_EXT = 1000428001,
     XR_TYPE_PLANE_DETECTOR_CREATE_INFO_EXT = 1000429001,
@@ -706,6 +758,21 @@ typedef enum XrStructureType {
     XR_TYPE_PLANE_DETECTOR_LOCATION_EXT = 1000429005,
     XR_TYPE_PLANE_DETECTOR_POLYGON_BUFFER_EXT = 1000429006,
     XR_TYPE_SYSTEM_PLANE_DETECTION_PROPERTIES_EXT = 1000429007,
+    XR_TYPE_TRACKABLE_GET_INFO_ANDROID = 1000455000,
+    XR_TYPE_ANCHOR_SPACE_CREATE_INFO_ANDROID = 1000455001,
+    XR_TYPE_TRACKABLE_PLANE_ANDROID = 1000455003,
+    XR_TYPE_TRACKABLE_TRACKER_CREATE_INFO_ANDROID = 1000455004,
+    XR_TYPE_SYSTEM_TRACKABLES_PROPERTIES_ANDROID = 1000455005,
+    XR_TYPE_PERSISTED_ANCHOR_SPACE_CREATE_INFO_ANDROID = 1000457001,
+    XR_TYPE_PERSISTED_ANCHOR_SPACE_INFO_ANDROID = 1000457002,
+    XR_TYPE_DEVICE_ANCHOR_PERSISTENCE_CREATE_INFO_ANDROID = 1000457003,
+    XR_TYPE_SYSTEM_DEVICE_ANCHOR_PERSISTENCE_PROPERTIES_ANDROID = 1000457004,
+    XR_TYPE_PASSTHROUGH_CAMERA_STATE_GET_INFO_ANDROID = 1000460000,
+    XR_TYPE_SYSTEM_PASSTHROUGH_CAMERA_STATE_PROPERTIES_ANDROID = 1000460001,
+    XR_TYPE_RAYCAST_INFO_ANDROID = 1000463000,
+    XR_TYPE_RAYCAST_HIT_RESULTS_ANDROID = 1000463001,
+    XR_TYPE_TRACKABLE_OBJECT_ANDROID = 1000466000,
+    XR_TYPE_TRACKABLE_OBJECT_CONFIGURATION_ANDROID = 1000466001,
     XR_TYPE_FUTURE_CANCEL_INFO_EXT = 1000469000,
     XR_TYPE_FUTURE_POLL_INFO_EXT = 1000469001,
     XR_TYPE_FUTURE_COMPLETION_EXT = 1000469002,
@@ -747,6 +814,54 @@ typedef enum XrStructureType {
     XR_TYPE_SHARE_SPACES_RECIPIENT_GROUPS_META = 1000572000,
     XR_TYPE_SPACE_GROUP_UUID_FILTER_INFO_META = 1000572001,
     XR_TYPE_SYSTEM_SPATIAL_ENTITY_GROUP_SHARING_PROPERTIES_META = 1000572100,
+    XR_TYPE_ANCHOR_SHARING_INFO_ANDROID = 1000701000,
+    XR_TYPE_ANCHOR_SHARING_TOKEN_ANDROID = 1000701001,
+    XR_TYPE_SYSTEM_ANCHOR_SHARING_EXPORT_PROPERTIES_ANDROID = 1000701002,
+    XR_TYPE_SYSTEM_MARKER_TRACKING_PROPERTIES_ANDROID = 1000707000,
+    XR_TYPE_TRACKABLE_MARKER_CONFIGURATION_ANDROID = 1000707001,
+    XR_TYPE_TRACKABLE_MARKER_ANDROID = 1000707002,
+    XR_TYPE_SPATIAL_CAPABILITY_COMPONENT_TYPES_EXT = 1000740000,
+    XR_TYPE_SPATIAL_CONTEXT_CREATE_INFO_EXT = 1000740001,
+    XR_TYPE_CREATE_SPATIAL_CONTEXT_COMPLETION_EXT = 1000740002,
+    XR_TYPE_SPATIAL_DISCOVERY_SNAPSHOT_CREATE_INFO_EXT = 1000740003,
+    XR_TYPE_CREATE_SPATIAL_DISCOVERY_SNAPSHOT_COMPLETION_INFO_EXT = 1000740004,
+    XR_TYPE_CREATE_SPATIAL_DISCOVERY_SNAPSHOT_COMPLETION_EXT = 1000740005,
+    XR_TYPE_SPATIAL_COMPONENT_DATA_QUERY_CONDITION_EXT = 1000740006,
+    XR_TYPE_SPATIAL_COMPONENT_DATA_QUERY_RESULT_EXT = 1000740007,
+    XR_TYPE_SPATIAL_BUFFER_GET_INFO_EXT = 1000740008,
+    XR_TYPE_SPATIAL_COMPONENT_BOUNDED_2D_LIST_EXT = 1000740009,
+    XR_TYPE_SPATIAL_COMPONENT_BOUNDED_3D_LIST_EXT = 1000740010,
+    XR_TYPE_SPATIAL_COMPONENT_PARENT_LIST_EXT = 1000740011,
+    XR_TYPE_SPATIAL_COMPONENT_MESH_3D_LIST_EXT = 1000740012,
+    XR_TYPE_SPATIAL_ENTITY_FROM_ID_CREATE_INFO_EXT = 1000740013,
+    XR_TYPE_SPATIAL_UPDATE_SNAPSHOT_CREATE_INFO_EXT = 1000740014,
+    XR_TYPE_EVENT_DATA_SPATIAL_DISCOVERY_RECOMMENDED_EXT = 1000740015,
+    XR_TYPE_SPATIAL_FILTER_TRACKING_STATE_EXT = 1000740016,
+    XR_TYPE_SPATIAL_CAPABILITY_CONFIGURATION_PLANE_TRACKING_EXT = 1000741000,
+    XR_TYPE_SPATIAL_COMPONENT_PLANE_ALIGNMENT_LIST_EXT = 1000741001,
+    XR_TYPE_SPATIAL_COMPONENT_MESH_2D_LIST_EXT = 1000741002,
+    XR_TYPE_SPATIAL_COMPONENT_POLYGON_2D_LIST_EXT = 1000741003,
+    XR_TYPE_SPATIAL_COMPONENT_PLANE_SEMANTIC_LABEL_LIST_EXT = 1000741004,
+    XR_TYPE_SPATIAL_CAPABILITY_CONFIGURATION_QR_CODE_EXT = 1000743000,
+    XR_TYPE_SPATIAL_CAPABILITY_CONFIGURATION_MICRO_QR_CODE_EXT = 1000743001,
+    XR_TYPE_SPATIAL_CAPABILITY_CONFIGURATION_ARUCO_MARKER_EXT = 1000743002,
+    XR_TYPE_SPATIAL_CAPABILITY_CONFIGURATION_APRIL_TAG_EXT = 1000743003,
+    XR_TYPE_SPATIAL_MARKER_SIZE_EXT = 1000743004,
+    XR_TYPE_SPATIAL_MARKER_STATIC_OPTIMIZATION_EXT = 1000743005,
+    XR_TYPE_SPATIAL_COMPONENT_MARKER_LIST_EXT = 1000743006,
+    XR_TYPE_SPATIAL_CAPABILITY_CONFIGURATION_ANCHOR_EXT = 1000762000,
+    XR_TYPE_SPATIAL_COMPONENT_ANCHOR_LIST_EXT = 1000762001,
+    XR_TYPE_SPATIAL_ANCHOR_CREATE_INFO_EXT = 1000762002,
+    XR_TYPE_SPATIAL_PERSISTENCE_CONTEXT_CREATE_INFO_EXT = 1000763000,
+    XR_TYPE_CREATE_SPATIAL_PERSISTENCE_CONTEXT_COMPLETION_EXT = 1000763001,
+    XR_TYPE_SPATIAL_CONTEXT_PERSISTENCE_CONFIG_EXT = 1000763002,
+    XR_TYPE_SPATIAL_DISCOVERY_PERSISTENCE_UUID_FILTER_EXT = 1000763003,
+    XR_TYPE_SPATIAL_COMPONENT_PERSISTENCE_LIST_EXT = 1000763004,
+    XR_TYPE_SPATIAL_ENTITY_PERSIST_INFO_EXT = 1000781000,
+    XR_TYPE_PERSIST_SPATIAL_ENTITY_COMPLETION_EXT = 1000781001,
+    XR_TYPE_SPATIAL_ENTITY_UNPERSIST_INFO_EXT = 1000781002,
+    XR_TYPE_UNPERSIST_SPATIAL_ENTITY_COMPLETION_EXT = 1000781003,
+    XR_TYPE_LOADER_INIT_INFO_PROPERTIES_EXT = 1000838000,
     XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR = XR_TYPE_GRAPHICS_BINDING_VULKAN_KHR,
     XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR,
     XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR,
@@ -853,6 +968,8 @@ typedef enum XrObjectType {
     XR_OBJECT_TYPE_FACE_TRACKER2_FB = 1000287012,
     XR_OBJECT_TYPE_ENVIRONMENT_DEPTH_PROVIDER_META = 1000291000,
     XR_OBJECT_TYPE_ENVIRONMENT_DEPTH_SWAPCHAIN_META = 1000291001,
+    XR_OBJECT_TYPE_RENDER_MODEL_EXT = 1000300000,
+    XR_OBJECT_TYPE_RENDER_MODEL_ASSET_EXT = 1000300001,
     XR_OBJECT_TYPE_PASSTHROUGH_HTC = 1000317000,
     XR_OBJECT_TYPE_BODY_TRACKER_HTC = 1000320000,
     XR_OBJECT_TYPE_BODY_TRACKER_BD = 1000385000,
@@ -860,8 +977,14 @@ typedef enum XrObjectType {
     XR_OBJECT_TYPE_SENSE_DATA_SNAPSHOT_BD = 1000389001,
     XR_OBJECT_TYPE_ANCHOR_BD = 1000389002,
     XR_OBJECT_TYPE_PLANE_DETECTOR_EXT = 1000429000,
+    XR_OBJECT_TYPE_TRACKABLE_TRACKER_ANDROID = 1000455001,
+    XR_OBJECT_TYPE_DEVICE_ANCHOR_PERSISTENCE_ANDROID = 1000457000,
     XR_OBJECT_TYPE_WORLD_MESH_DETECTOR_ML = 1000474000,
     XR_OBJECT_TYPE_FACIAL_EXPRESSION_CLIENT_ML = 1000482000,
+    XR_OBJECT_TYPE_SPATIAL_ENTITY_EXT = 1000740000,
+    XR_OBJECT_TYPE_SPATIAL_CONTEXT_EXT = 1000740001,
+    XR_OBJECT_TYPE_SPATIAL_SNAPSHOT_EXT = 1000740002,
+    XR_OBJECT_TYPE_SPATIAL_PERSISTENCE_CONTEXT_EXT = 1000763000,
     XR_OBJECT_TYPE_MAX_ENUM = 0x7FFFFFFF
 } XrObjectType;
 typedef XrFlags64 XrInstanceCreateFlags;
@@ -6886,6 +7009,65 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetRecommendedLayerResolutionMETA(
 #endif /* !XR_NO_PROTOTYPES */
 
 
+// XR_META_spatial_entity_persistence is a preprocessor guard. Do not pass it to API calls.
+#define XR_META_spatial_entity_persistence 1
+#define XR_META_spatial_entity_persistence_SPEC_VERSION 1
+#define XR_META_SPATIAL_ENTITY_PERSISTENCE_EXTENSION_NAME "XR_META_spatial_entity_persistence"
+// XrSystemSpacePersistencePropertiesMETA extends XrSystemProperties
+typedef struct XrSystemSpacePersistencePropertiesMETA {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrBool32                    supportsSpacePersistence;
+} XrSystemSpacePersistencePropertiesMETA;
+
+typedef struct XrSpacesSaveInfoMETA {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    uint32_t                    spaceCount;
+    XrSpace*                    spaces;
+} XrSpacesSaveInfoMETA;
+
+typedef struct XrEventDataSpacesSaveResultMETA {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrAsyncRequestIdFB          requestId;
+    XrResult                    result;
+} XrEventDataSpacesSaveResultMETA;
+
+typedef struct XrSpacesEraseInfoMETA {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    uint32_t                    spaceCount;
+    XrSpace*                    spaces;
+    uint32_t                    uuidCount;
+    XrUuidEXT*                  uuids;
+} XrSpacesEraseInfoMETA;
+
+typedef struct XrEventDataSpacesEraseResultMETA {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrAsyncRequestIdFB          requestId;
+    XrResult                    result;
+} XrEventDataSpacesEraseResultMETA;
+
+typedef XrResult (XRAPI_PTR *PFN_xrSaveSpacesMETA)(XrSession session, const XrSpacesSaveInfoMETA* info, XrAsyncRequestIdFB* requestId);
+typedef XrResult (XRAPI_PTR *PFN_xrEraseSpacesMETA)(XrSession session, const XrSpacesEraseInfoMETA* info, XrAsyncRequestIdFB* requestId);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrSaveSpacesMETA(
+    XrSession                                   session,
+    const XrSpacesSaveInfoMETA*                 info,
+    XrAsyncRequestIdFB*                         requestId);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEraseSpacesMETA(
+    XrSession                                   session,
+    const XrSpacesEraseInfoMETA*                info,
+    XrAsyncRequestIdFB*                         requestId);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
 // XR_META_passthrough_color_lut is a preprocessor guard. Do not pass it to API calls.
 #define XR_META_passthrough_color_lut 1
 XR_DEFINE_HANDLE(XrPassthroughColorLutMETA)
@@ -7118,6 +7300,52 @@ typedef struct XrEventDataPassthroughLayerResumedMETA {
     XrPassthroughLayerFB        layer;
 } XrEventDataPassthroughLayerResumedMETA;
 
+
+
+// XR_META_body_tracking_calibration is a preprocessor guard. Do not pass it to API calls.
+#define XR_META_body_tracking_calibration 1
+#define XR_META_body_tracking_calibration_SPEC_VERSION 1
+#define XR_META_BODY_TRACKING_CALIBRATION_EXTENSION_NAME "XR_META_body_tracking_calibration"
+
+typedef enum XrBodyTrackingCalibrationStateMETA {
+    XR_BODY_TRACKING_CALIBRATION_STATE_VALID_META = 1,
+    XR_BODY_TRACKING_CALIBRATION_STATE_CALIBRATING_META = 2,
+    XR_BODY_TRACKING_CALIBRATION_STATE_INVALID_META = 3,
+    XR_BODY_TRACKING_CALIBRATION_STATE_MAX_ENUM_META = 0x7FFFFFFF
+} XrBodyTrackingCalibrationStateMETA;
+// XrBodyTrackingCalibrationStatusMETA extends XrBodyJointLocationsFB
+typedef struct XrBodyTrackingCalibrationStatusMETA {
+    XrStructureType                       type;
+    void* XR_MAY_ALIAS                    next;
+    XrBodyTrackingCalibrationStateMETA    status;
+} XrBodyTrackingCalibrationStatusMETA;
+
+typedef struct XrBodyTrackingCalibrationInfoMETA {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    float                       bodyHeight;
+} XrBodyTrackingCalibrationInfoMETA;
+
+// XrSystemPropertiesBodyTrackingCalibrationMETA extends XrSystemProperties
+typedef struct XrSystemPropertiesBodyTrackingCalibrationMETA {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    XrBool32              supportsHeightOverride;
+} XrSystemPropertiesBodyTrackingCalibrationMETA;
+
+typedef XrResult (XRAPI_PTR *PFN_xrSuggestBodyTrackingCalibrationOverrideMETA)(XrBodyTrackerFB bodyTracker, const XrBodyTrackingCalibrationInfoMETA* calibrationInfo);
+typedef XrResult (XRAPI_PTR *PFN_xrResetBodyTrackingCalibrationMETA)(XrBodyTrackerFB bodyTracker);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrSuggestBodyTrackingCalibrationOverrideMETA(
+    XrBodyTrackerFB                             bodyTracker,
+    const XrBodyTrackingCalibrationInfoMETA*    calibrationInfo);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrResetBodyTrackingCalibrationMETA(
+    XrBodyTrackerFB                             bodyTracker);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
 
 
 // XR_FB_face_tracking2 is a preprocessor guard. Do not pass it to API calls.
@@ -7451,6 +7679,204 @@ XRAPI_ATTR XrResult XRAPI_CALL xrSetEnvironmentDepthHandRemovalMETA(
 #define XR_EXT_uuid_SPEC_VERSION          1
 #define XR_EXT_UUID_EXTENSION_NAME        "XR_EXT_uuid"
 #define XR_UUID_SIZE_EXT                  16
+
+
+// XR_EXT_render_model is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_render_model 1
+XR_DEFINE_ATOM(XrRenderModelIdEXT)
+XR_DEFINE_HANDLE(XrRenderModelEXT)
+XR_DEFINE_HANDLE(XrRenderModelAssetEXT)
+#define XR_MAX_RENDER_MODEL_ASSET_NODE_NAME_SIZE_EXT 64
+#define XR_EXT_render_model_SPEC_VERSION  1
+#define XR_EXT_RENDER_MODEL_EXTENSION_NAME "XR_EXT_render_model"
+#define XR_NULL_RENDER_MODEL_ID_EXT       0
+typedef struct XrRenderModelCreateInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrRenderModelIdEXT          renderModelId;
+    uint32_t                    gltfExtensionCount;
+    const char* const*          gltfExtensions;
+} XrRenderModelCreateInfoEXT;
+
+typedef struct XrRenderModelPropertiesGetInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrRenderModelPropertiesGetInfoEXT;
+
+typedef struct XrRenderModelPropertiesEXT {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    XrUuidEXT             cacheId;
+    uint32_t              animatableNodeCount;
+} XrRenderModelPropertiesEXT;
+
+typedef struct XrRenderModelSpaceCreateInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrRenderModelEXT            renderModel;
+} XrRenderModelSpaceCreateInfoEXT;
+
+typedef struct XrRenderModelStateGetInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrTime                      displayTime;
+} XrRenderModelStateGetInfoEXT;
+
+typedef struct XrRenderModelNodeStateEXT {
+    XrPosef     nodePose;
+    XrBool32    isVisible;
+} XrRenderModelNodeStateEXT;
+
+typedef struct XrRenderModelStateEXT {
+    XrStructureType               type;
+    void* XR_MAY_ALIAS            next;
+    uint32_t                      nodeStateCount;
+    XrRenderModelNodeStateEXT*    nodeStates;
+} XrRenderModelStateEXT;
+
+typedef struct XrRenderModelAssetCreateInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrUuidEXT                   cacheId;
+} XrRenderModelAssetCreateInfoEXT;
+
+typedef struct XrRenderModelAssetDataGetInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrRenderModelAssetDataGetInfoEXT;
+
+typedef struct XrRenderModelAssetDataEXT {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    uint32_t              bufferCapacityInput;
+    uint32_t              bufferCountOutput;
+    uint8_t*              buffer;
+} XrRenderModelAssetDataEXT;
+
+typedef struct XrRenderModelAssetPropertiesGetInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrRenderModelAssetPropertiesGetInfoEXT;
+
+typedef struct XrRenderModelAssetNodePropertiesEXT {
+    char    uniqueName[XR_MAX_RENDER_MODEL_ASSET_NODE_NAME_SIZE_EXT];
+} XrRenderModelAssetNodePropertiesEXT;
+
+typedef struct XrRenderModelAssetPropertiesEXT {
+    XrStructureType                         type;
+    void* XR_MAY_ALIAS                      next;
+    uint32_t                                nodePropertyCount;
+    XrRenderModelAssetNodePropertiesEXT*    nodeProperties;
+} XrRenderModelAssetPropertiesEXT;
+
+typedef XrResult (XRAPI_PTR *PFN_xrCreateRenderModelEXT)(XrSession session, const XrRenderModelCreateInfoEXT* createInfo, XrRenderModelEXT* renderModel);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroyRenderModelEXT)(XrRenderModelEXT renderModel);
+typedef XrResult (XRAPI_PTR *PFN_xrGetRenderModelPropertiesEXT)(XrRenderModelEXT renderModel, const XrRenderModelPropertiesGetInfoEXT* getInfo, XrRenderModelPropertiesEXT* properties);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateRenderModelSpaceEXT)(XrSession session, const XrRenderModelSpaceCreateInfoEXT* createInfo, XrSpace* space);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateRenderModelAssetEXT)(XrSession session, const XrRenderModelAssetCreateInfoEXT* createInfo, XrRenderModelAssetEXT* asset);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroyRenderModelAssetEXT)(XrRenderModelAssetEXT asset);
+typedef XrResult (XRAPI_PTR *PFN_xrGetRenderModelAssetDataEXT)(XrRenderModelAssetEXT asset, const XrRenderModelAssetDataGetInfoEXT* getInfo, XrRenderModelAssetDataEXT* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetRenderModelAssetPropertiesEXT)(XrRenderModelAssetEXT asset, const XrRenderModelAssetPropertiesGetInfoEXT* getInfo, XrRenderModelAssetPropertiesEXT* properties);
+typedef XrResult (XRAPI_PTR *PFN_xrGetRenderModelStateEXT)(XrRenderModelEXT renderModel, const XrRenderModelStateGetInfoEXT* getInfo, XrRenderModelStateEXT* state);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateRenderModelEXT(
+    XrSession                                   session,
+    const XrRenderModelCreateInfoEXT*           createInfo,
+    XrRenderModelEXT*                           renderModel);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyRenderModelEXT(
+    XrRenderModelEXT                            renderModel);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetRenderModelPropertiesEXT(
+    XrRenderModelEXT                            renderModel,
+    const XrRenderModelPropertiesGetInfoEXT*    getInfo,
+    XrRenderModelPropertiesEXT*                 properties);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateRenderModelSpaceEXT(
+    XrSession                                   session,
+    const XrRenderModelSpaceCreateInfoEXT*      createInfo,
+    XrSpace*                                    space);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateRenderModelAssetEXT(
+    XrSession                                   session,
+    const XrRenderModelAssetCreateInfoEXT*      createInfo,
+    XrRenderModelAssetEXT*                      asset);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyRenderModelAssetEXT(
+    XrRenderModelAssetEXT                       asset);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetRenderModelAssetDataEXT(
+    XrRenderModelAssetEXT                       asset,
+    const XrRenderModelAssetDataGetInfoEXT*     getInfo,
+    XrRenderModelAssetDataEXT*                  buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetRenderModelAssetPropertiesEXT(
+    XrRenderModelAssetEXT                       asset,
+    const XrRenderModelAssetPropertiesGetInfoEXT* getInfo,
+    XrRenderModelAssetPropertiesEXT*            properties);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetRenderModelStateEXT(
+    XrRenderModelEXT                            renderModel,
+    const XrRenderModelStateGetInfoEXT*         getInfo,
+    XrRenderModelStateEXT*                      state);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_EXT_interaction_render_model is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_interaction_render_model 1
+#define XR_EXT_interaction_render_model_SPEC_VERSION 1
+#define XR_EXT_INTERACTION_RENDER_MODEL_EXTENSION_NAME "XR_EXT_interaction_render_model"
+typedef struct XrInteractionRenderModelIdsEnumerateInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrInteractionRenderModelIdsEnumerateInfoEXT;
+
+typedef struct XrInteractionRenderModelSubactionPathInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrInteractionRenderModelSubactionPathInfoEXT;
+
+typedef struct XrInteractionRenderModelTopLevelUserPathGetInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    uint32_t                    topLevelUserPathCount;
+    const XrPath*               topLevelUserPaths;
+} XrInteractionRenderModelTopLevelUserPathGetInfoEXT;
+
+typedef struct XrEventDataInteractionRenderModelsChangedEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrEventDataInteractionRenderModelsChangedEXT;
+
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateInteractionRenderModelIdsEXT)(XrSession session, const XrInteractionRenderModelIdsEnumerateInfoEXT* getInfo, uint32_t renderModelIdCapacityInput, uint32_t* renderModelIdCountOutput, XrRenderModelIdEXT* renderModelIds);
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateRenderModelSubactionPathsEXT)(XrRenderModelEXT renderModel, const XrInteractionRenderModelSubactionPathInfoEXT* info, uint32_t pathCapacityInput, uint32_t* pathCountOutput, XrPath* paths);
+typedef XrResult (XRAPI_PTR *PFN_xrGetRenderModelPoseTopLevelUserPathEXT)(XrRenderModelEXT renderModel, const XrInteractionRenderModelTopLevelUserPathGetInfoEXT* info, XrPath* topLevelUserPath);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateInteractionRenderModelIdsEXT(
+    XrSession                                   session,
+    const XrInteractionRenderModelIdsEnumerateInfoEXT* getInfo,
+    uint32_t                                    renderModelIdCapacityInput,
+    uint32_t*                                   renderModelIdCountOutput,
+    XrRenderModelIdEXT*                         renderModelIds);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateRenderModelSubactionPathsEXT(
+    XrRenderModelEXT                            renderModel,
+    const XrInteractionRenderModelSubactionPathInfoEXT* info,
+    uint32_t                                    pathCapacityInput,
+    uint32_t*                                   pathCountOutput,
+    XrPath*                                     paths);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetRenderModelPoseTopLevelUserPathEXT(
+    XrRenderModelEXT                            renderModel,
+    const XrInteractionRenderModelTopLevelUserPathGetInfoEXT* info,
+    XrPath*                                     topLevelUserPath);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
 
 
 // XR_EXT_hand_interaction is a preprocessor guard. Do not pass it to API calls.
@@ -7968,6 +8394,7 @@ typedef enum XrSpatialEntityComponentTypeBD {
     XR_SPATIAL_ENTITY_COMPONENT_TYPE_POLYGON_BD = 3,
     XR_SPATIAL_ENTITY_COMPONENT_TYPE_BOUNDING_BOX_3D_BD = 4,
     XR_SPATIAL_ENTITY_COMPONENT_TYPE_TRIANGLE_MESH_BD = 5,
+    XR_SPATIAL_ENTITY_COMPONENT_TYPE_PLANE_ORIENTATION_BD = 1000396000,
     XR_SPATIAL_ENTITY_COMPONENT_TYPE_MAX_ENUM_BD = 0x7FFFFFFF
 } XrSpatialEntityComponentTypeBD;
 
@@ -8004,6 +8431,7 @@ typedef enum XrSenseDataProviderTypeBD {
     XR_SENSE_DATA_PROVIDER_TYPE_ANCHOR_BD = 1000390000,
     XR_SENSE_DATA_PROVIDER_TYPE_SCENE_BD = 1000392000,
     XR_SENSE_DATA_PROVIDER_TYPE_MESH_BD = 1000393000,
+    XR_SENSE_DATA_PROVIDER_TYPE_PLANE_BD = 1000396000,
     XR_SENSE_DATA_PROVIDER_TYPE_MAX_ENUM_BD = 0x7FFFFFFF
 } XrSenseDataProviderTypeBD;
 
@@ -8284,7 +8712,7 @@ XRAPI_ATTR XrResult XRAPI_CALL xrCreateAnchorSpaceBD(
 
 // XR_BD_spatial_anchor is a preprocessor guard. Do not pass it to API calls.
 #define XR_BD_spatial_anchor 1
-#define XR_BD_spatial_anchor_SPEC_VERSION 1
+#define XR_BD_spatial_anchor_SPEC_VERSION 2
 #define XR_BD_SPATIAL_ANCHOR_EXTENSION_NAME "XR_BD_spatial_anchor"
 
 typedef enum XrPersistenceLocationBD {
@@ -8310,8 +8738,8 @@ typedef struct XrSpatialAnchorCreateCompletionBD {
     XrStructureType       type;
     void* XR_MAY_ALIAS    next;
     XrResult              futureResult;
-    XrAnchorBD            anchor;
     XrUuidEXT             uuid;
+    XrAnchorBD            anchor;
 } XrSpatialAnchorCreateCompletionBD;
 
 typedef struct XrSpatialAnchorPersistInfoBD {
@@ -8396,7 +8824,7 @@ typedef struct XrSharedSpatialAnchorDownloadInfoBD {
 typedef XrResult (XRAPI_PTR *PFN_xrShareSpatialAnchorAsyncBD)(XrSenseDataProviderBD provider, const XrSpatialAnchorShareInfoBD* info, XrFutureEXT* future);
 typedef XrResult (XRAPI_PTR *PFN_xrShareSpatialAnchorCompleteBD)(XrSenseDataProviderBD provider, XrFutureEXT future, XrFutureCompletionEXT* completion);
 typedef XrResult (XRAPI_PTR *PFN_xrDownloadSharedSpatialAnchorAsyncBD)(XrSenseDataProviderBD provider, const XrSharedSpatialAnchorDownloadInfoBD* info, XrFutureEXT* future);
-typedef XrResult (XRAPI_PTR *PFN_xrDownloadSharedSpatialAnchorCompleteBD)(XrSenseDataProviderBD provider, XrFutureEXT future, XrFutureCompletionEXT*  completion);
+typedef XrResult (XRAPI_PTR *PFN_xrDownloadSharedSpatialAnchorCompleteBD)(XrSenseDataProviderBD provider, XrFutureEXT future, XrFutureCompletionEXT* completion);
 
 #ifndef XR_NO_PROTOTYPES
 #ifdef XR_EXTENSION_PROTOTYPES
@@ -8502,6 +8930,42 @@ typedef struct XrFuturePollResultProgressBD {
     XrBool32              isSupported;
     uint32_t              progressPercentage;
 } XrFuturePollResultProgressBD;
+
+
+
+// XR_BD_spatial_plane is a preprocessor guard. Do not pass it to API calls.
+#define XR_BD_spatial_plane 1
+#define XR_BD_spatial_plane_SPEC_VERSION  1
+#define XR_BD_SPATIAL_PLANE_EXTENSION_NAME "XR_BD_spatial_plane"
+
+typedef enum XrPlaneOrientationBD {
+    XR_PLANE_ORIENTATION_HORIZONTAL_UPWARD_BD = 0,
+    XR_PLANE_ORIENTATION_HORIZONTAL_DOWNWARD_BD = 1,
+    XR_PLANE_ORIENTATION_VERTICAL_BD = 2,
+    XR_PLANE_ORIENTATION_ARBITRARY_BD = 3,
+    XR_PLANE_ORIENTATION_MAX_ENUM_BD = 0x7FFFFFFF
+} XrPlaneOrientationBD;
+// XrSystemSpatialPlanePropertiesBD extends XrSystemProperties
+typedef struct XrSystemSpatialPlanePropertiesBD {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    XrBool32              supportsSpatialPlane;
+} XrSystemSpatialPlanePropertiesBD;
+
+// XrSpatialEntityComponentDataPlaneOrientationBD extends XrSpatialEntityComponentDataBaseHeaderBD
+typedef struct XrSpatialEntityComponentDataPlaneOrientationBD {
+    XrStructureType         type;
+    void* XR_MAY_ALIAS      next;
+    XrPlaneOrientationBD    orientation;
+} XrSpatialEntityComponentDataPlaneOrientationBD;
+
+// XrSenseDataFilterPlaneOrientationBD extends XrSenseDataQueryInfoBD
+typedef struct XrSenseDataFilterPlaneOrientationBD {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    uint32_t                    orientationCount;
+    XrPlaneOrientationBD*       orientations;
+} XrSenseDataFilterPlaneOrientationBD;
 
 
 
@@ -8651,7 +9115,7 @@ typedef struct XrPlaneDetectorPolygonBufferEXT {
     XrVector2f*           vertices;
 } XrPlaneDetectorPolygonBufferEXT;
 
-typedef XrResult (XRAPI_PTR *PFN_xrCreatePlaneDetectorEXT)(XrSession session, const XrPlaneDetectorCreateInfoEXT*  createInfo, XrPlaneDetectorEXT* planeDetector);
+typedef XrResult (XRAPI_PTR *PFN_xrCreatePlaneDetectorEXT)(XrSession session, const XrPlaneDetectorCreateInfoEXT* createInfo, XrPlaneDetectorEXT* planeDetector);
 typedef XrResult (XRAPI_PTR *PFN_xrDestroyPlaneDetectorEXT)(XrPlaneDetectorEXT planeDetector);
 typedef XrResult (XRAPI_PTR *PFN_xrBeginPlaneDetectionEXT)(XrPlaneDetectorEXT planeDetector, const XrPlaneDetectorBeginInfoEXT* beginInfo);
 typedef XrResult (XRAPI_PTR *PFN_xrGetPlaneDetectionStateEXT)(XrPlaneDetectorEXT planeDetector, XrPlaneDetectionStateEXT* state);
@@ -8694,6 +9158,363 @@ XRAPI_ATTR XrResult XRAPI_CALL xrGetPlanePolygonBufferEXT(
 #define XR_OPPO_controller_interaction 1
 #define XR_OPPO_controller_interaction_SPEC_VERSION 1
 #define XR_OPPO_CONTROLLER_INTERACTION_EXTENSION_NAME "XR_OPPO_controller_interaction"
+
+
+// XR_ANDROID_trackables is a preprocessor guard. Do not pass it to API calls.
+#define XR_ANDROID_trackables 1
+
+#define XR_NULL_TRACKABLE_ANDROID 0
+
+XR_DEFINE_ATOM(XrTrackableANDROID)
+XR_DEFINE_HANDLE(XrTrackableTrackerANDROID)
+#define XR_ANDROID_trackables_SPEC_VERSION 1
+#define XR_ANDROID_TRACKABLES_EXTENSION_NAME "XR_ANDROID_trackables"
+
+typedef enum XrTrackingStateANDROID {
+    XR_TRACKING_STATE_PAUSED_ANDROID = 0,
+    XR_TRACKING_STATE_STOPPED_ANDROID = 1,
+    XR_TRACKING_STATE_TRACKING_ANDROID = 2,
+    XR_TRACKING_STATE_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrTrackingStateANDROID;
+
+typedef enum XrTrackableTypeANDROID {
+    XR_TRACKABLE_TYPE_NOT_VALID_ANDROID = 0,
+    XR_TRACKABLE_TYPE_PLANE_ANDROID = 1,
+    XR_TRACKABLE_TYPE_DEPTH_ANDROID = 1000463000,
+    XR_TRACKABLE_TYPE_OBJECT_ANDROID = 1000466000,
+    XR_TRACKABLE_TYPE_MARKER_ANDROID = 1000707000,
+    XR_TRACKABLE_TYPE_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrTrackableTypeANDROID;
+
+typedef enum XrPlaneTypeANDROID {
+    XR_PLANE_TYPE_HORIZONTAL_DOWNWARD_FACING_ANDROID = 0,
+    XR_PLANE_TYPE_HORIZONTAL_UPWARD_FACING_ANDROID = 1,
+    XR_PLANE_TYPE_VERTICAL_ANDROID = 2,
+    XR_PLANE_TYPE_ARBITRARY_ANDROID = 3,
+    XR_PLANE_TYPE_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrPlaneTypeANDROID;
+
+typedef enum XrPlaneLabelANDROID {
+    XR_PLANE_LABEL_UNKNOWN_ANDROID = 0,
+    XR_PLANE_LABEL_WALL_ANDROID = 1,
+    XR_PLANE_LABEL_FLOOR_ANDROID = 2,
+    XR_PLANE_LABEL_CEILING_ANDROID = 3,
+    XR_PLANE_LABEL_TABLE_ANDROID = 4,
+    XR_PLANE_LABEL_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrPlaneLabelANDROID;
+typedef struct XrTrackableTrackerCreateInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrTrackableTypeANDROID      trackableType;
+} XrTrackableTrackerCreateInfoANDROID;
+
+typedef struct XrTrackableGetInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrTrackableANDROID          trackable;
+    XrSpace                     baseSpace;
+    XrTime                      time;
+} XrTrackableGetInfoANDROID;
+
+typedef struct XrTrackablePlaneANDROID {
+    XrStructureType           type;
+    void* XR_MAY_ALIAS        next;
+    XrTrackingStateANDROID    trackingState;
+    XrPosef                   centerPose;
+    XrExtent2Df               extents;
+    XrPlaneTypeANDROID        planeType;
+    XrPlaneLabelANDROID       planeLabel;
+    XrTrackableANDROID        subsumedByPlane;
+    XrTime                    lastUpdatedTime;
+    uint32_t                  vertexCapacityInput;
+    uint32_t                  vertexCountOutput;
+    XrVector2f*               vertices;
+} XrTrackablePlaneANDROID;
+
+typedef struct XrAnchorSpaceCreateInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpace                     space;
+    XrTime                      time;
+    XrPosef                     pose;
+    XrTrackableANDROID          trackable;
+} XrAnchorSpaceCreateInfoANDROID;
+
+// XrSystemTrackablesPropertiesANDROID extends XrSystemProperties
+typedef struct XrSystemTrackablesPropertiesANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrBool32                    supportsAnchor;
+    uint32_t                    maxAnchors;
+} XrSystemTrackablesPropertiesANDROID;
+
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSupportedTrackableTypesANDROID)(XrInstance instance, XrSystemId systemId, uint32_t trackableTypeCapacityInput, uint32_t* trackableTypeCountOutput, XrTrackableTypeANDROID* trackableTypes);
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSupportedAnchorTrackableTypesANDROID)(XrInstance instance, XrSystemId systemId, uint32_t trackableTypeCapacityInput, uint32_t* trackableTypeCountOutput, XrTrackableTypeANDROID* trackableTypes);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateTrackableTrackerANDROID)(XrSession session, const XrTrackableTrackerCreateInfoANDROID* createInfo, XrTrackableTrackerANDROID* trackableTracker);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroyTrackableTrackerANDROID)(XrTrackableTrackerANDROID trackableTracker);
+typedef XrResult (XRAPI_PTR *PFN_xrGetAllTrackablesANDROID)(XrTrackableTrackerANDROID trackableTracker, uint32_t trackableCapacityInput, uint32_t* trackableCountOutput, XrTrackableANDROID* trackables);
+typedef XrResult (XRAPI_PTR *PFN_xrGetTrackablePlaneANDROID)(XrTrackableTrackerANDROID trackableTracker, const XrTrackableGetInfoANDROID* getInfo, XrTrackablePlaneANDROID* planeOutput);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateAnchorSpaceANDROID)(XrSession session, const XrAnchorSpaceCreateInfoANDROID* createInfo, XrSpace* anchorOutput);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSupportedTrackableTypesANDROID(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    uint32_t                                    trackableTypeCapacityInput,
+    uint32_t*                                   trackableTypeCountOutput,
+    XrTrackableTypeANDROID*                     trackableTypes);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSupportedAnchorTrackableTypesANDROID(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    uint32_t                                    trackableTypeCapacityInput,
+    uint32_t*                                   trackableTypeCountOutput,
+    XrTrackableTypeANDROID*                     trackableTypes);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateTrackableTrackerANDROID(
+    XrSession                                   session,
+    const XrTrackableTrackerCreateInfoANDROID*  createInfo,
+    XrTrackableTrackerANDROID*                  trackableTracker);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyTrackableTrackerANDROID(
+    XrTrackableTrackerANDROID                   trackableTracker);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetAllTrackablesANDROID(
+    XrTrackableTrackerANDROID                   trackableTracker,
+    uint32_t                                    trackableCapacityInput,
+    uint32_t*                                   trackableCountOutput,
+    XrTrackableANDROID*                         trackables);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetTrackablePlaneANDROID(
+    XrTrackableTrackerANDROID                   trackableTracker,
+    const XrTrackableGetInfoANDROID*            getInfo,
+    XrTrackablePlaneANDROID*                    planeOutput);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateAnchorSpaceANDROID(
+    XrSession                                   session,
+    const XrAnchorSpaceCreateInfoANDROID*       createInfo,
+    XrSpace*                                    anchorOutput);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_ANDROID_device_anchor_persistence is a preprocessor guard. Do not pass it to API calls.
+#define XR_ANDROID_device_anchor_persistence 1
+XR_DEFINE_HANDLE(XrDeviceAnchorPersistenceANDROID)
+#define XR_ANDROID_device_anchor_persistence_SPEC_VERSION 1
+#define XR_ANDROID_DEVICE_ANCHOR_PERSISTENCE_EXTENSION_NAME "XR_ANDROID_device_anchor_persistence"
+
+typedef enum XrAnchorPersistStateANDROID {
+    XR_ANCHOR_PERSIST_STATE_PERSIST_NOT_REQUESTED_ANDROID = 0,
+    XR_ANCHOR_PERSIST_STATE_PERSIST_PENDING_ANDROID = 1,
+    XR_ANCHOR_PERSIST_STATE_PERSISTED_ANDROID = 2,
+    XR_ANCHOR_PERSIST_STATE_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrAnchorPersistStateANDROID;
+typedef struct XrDeviceAnchorPersistenceCreateInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrDeviceAnchorPersistenceCreateInfoANDROID;
+
+typedef struct XrPersistedAnchorSpaceCreateInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrUuidEXT                   anchorId;
+} XrPersistedAnchorSpaceCreateInfoANDROID;
+
+typedef struct XrPersistedAnchorSpaceInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpace                     anchor;
+} XrPersistedAnchorSpaceInfoANDROID;
+
+// XrSystemDeviceAnchorPersistencePropertiesANDROID extends XrSystemProperties
+typedef struct XrSystemDeviceAnchorPersistencePropertiesANDROID {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    XrBool32              supportsAnchorPersistence;
+} XrSystemDeviceAnchorPersistencePropertiesANDROID;
+
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSupportedPersistenceAnchorTypesANDROID)(XrInstance instance, XrSystemId systemId, uint32_t trackableTypeCapacityInput, uint32_t* trackableTypeCountOutput, XrTrackableTypeANDROID* trackableTypes);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateDeviceAnchorPersistenceANDROID)(XrSession session, const XrDeviceAnchorPersistenceCreateInfoANDROID* createInfo, XrDeviceAnchorPersistenceANDROID* outHandle);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroyDeviceAnchorPersistenceANDROID)(XrDeviceAnchorPersistenceANDROID handle);
+typedef XrResult (XRAPI_PTR *PFN_xrPersistAnchorANDROID)(XrDeviceAnchorPersistenceANDROID handle, const XrPersistedAnchorSpaceInfoANDROID* persistedInfo, XrUuidEXT* anchorIdOutput);
+typedef XrResult (XRAPI_PTR *PFN_xrGetAnchorPersistStateANDROID)(XrDeviceAnchorPersistenceANDROID handle, const XrUuidEXT* anchorId, XrAnchorPersistStateANDROID* persistState);
+typedef XrResult (XRAPI_PTR *PFN_xrCreatePersistedAnchorSpaceANDROID)(XrDeviceAnchorPersistenceANDROID handle, const XrPersistedAnchorSpaceCreateInfoANDROID* createInfo, XrSpace* anchorOutput);
+typedef XrResult (XRAPI_PTR *PFN_xrEnumeratePersistedAnchorsANDROID)(XrDeviceAnchorPersistenceANDROID handle, uint32_t anchorIdCapacityInput, uint32_t* anchorIdCountOutput, XrUuidEXT* anchorIds);
+typedef XrResult (XRAPI_PTR *PFN_xrUnpersistAnchorANDROID)(XrDeviceAnchorPersistenceANDROID handle, const XrUuidEXT* anchorId);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSupportedPersistenceAnchorTypesANDROID(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    uint32_t                                    trackableTypeCapacityInput,
+    uint32_t*                                   trackableTypeCountOutput,
+    XrTrackableTypeANDROID*                     trackableTypes);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateDeviceAnchorPersistenceANDROID(
+    XrSession                                   session,
+    const XrDeviceAnchorPersistenceCreateInfoANDROID* createInfo,
+    XrDeviceAnchorPersistenceANDROID*           outHandle);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroyDeviceAnchorPersistenceANDROID(
+    XrDeviceAnchorPersistenceANDROID            handle);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrPersistAnchorANDROID(
+    XrDeviceAnchorPersistenceANDROID            handle,
+    const XrPersistedAnchorSpaceInfoANDROID*    persistedInfo,
+    XrUuidEXT*                                  anchorIdOutput);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetAnchorPersistStateANDROID(
+    XrDeviceAnchorPersistenceANDROID            handle,
+    const XrUuidEXT*                            anchorId,
+    XrAnchorPersistStateANDROID*                persistState);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreatePersistedAnchorSpaceANDROID(
+    XrDeviceAnchorPersistenceANDROID            handle,
+    const XrPersistedAnchorSpaceCreateInfoANDROID* createInfo,
+    XrSpace*                                    anchorOutput);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumeratePersistedAnchorsANDROID(
+    XrDeviceAnchorPersistenceANDROID            handle,
+    uint32_t                                    anchorIdCapacityInput,
+    uint32_t*                                   anchorIdCountOutput,
+    XrUuidEXT*                                  anchorIds);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrUnpersistAnchorANDROID(
+    XrDeviceAnchorPersistenceANDROID            handle,
+    const XrUuidEXT*                            anchorId);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_ANDROID_passthrough_camera_state is a preprocessor guard. Do not pass it to API calls.
+#define XR_ANDROID_passthrough_camera_state 1
+#define XR_ANDROID_passthrough_camera_state_SPEC_VERSION 1
+#define XR_ANDROID_PASSTHROUGH_CAMERA_STATE_EXTENSION_NAME "XR_ANDROID_passthrough_camera_state"
+
+typedef enum XrPassthroughCameraStateANDROID {
+    XR_PASSTHROUGH_CAMERA_STATE_DISABLED_ANDROID = 0,
+    XR_PASSTHROUGH_CAMERA_STATE_INITIALIZING_ANDROID = 1,
+    XR_PASSTHROUGH_CAMERA_STATE_READY_ANDROID = 2,
+    XR_PASSTHROUGH_CAMERA_STATE_ERROR_ANDROID = 3,
+    XR_PASSTHROUGH_CAMERA_STATE_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrPassthroughCameraStateANDROID;
+// XrSystemPassthroughCameraStatePropertiesANDROID extends XrSystemProperties
+typedef struct XrSystemPassthroughCameraStatePropertiesANDROID {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    XrBool32              supportsPassthroughCameraState;
+} XrSystemPassthroughCameraStatePropertiesANDROID;
+
+typedef struct XrPassthroughCameraStateGetInfoANDROID {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+} XrPassthroughCameraStateGetInfoANDROID;
+
+typedef XrResult (XRAPI_PTR *PFN_xrGetPassthroughCameraStateANDROID)(XrSession session, const XrPassthroughCameraStateGetInfoANDROID* getInfo, XrPassthroughCameraStateANDROID* cameraStateOutput);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrGetPassthroughCameraStateANDROID(
+    XrSession                                   session,
+    const XrPassthroughCameraStateGetInfoANDROID* getInfo,
+    XrPassthroughCameraStateANDROID*            cameraStateOutput);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_ANDROID_raycast is a preprocessor guard. Do not pass it to API calls.
+#define XR_ANDROID_raycast 1
+#define XR_ANDROID_raycast_SPEC_VERSION   1
+#define XR_ANDROID_RAYCAST_EXTENSION_NAME "XR_ANDROID_raycast"
+typedef struct XrRaycastInfoANDROID {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    uint32_t                            maxResults;
+    uint32_t                            trackerCount;
+    const XrTrackableTrackerANDROID*    trackers;
+    XrVector3f                          origin;
+    XrVector3f                          trajectory;
+    XrSpace                             space;
+    XrTime                              time;
+} XrRaycastInfoANDROID;
+
+typedef struct XrRaycastHitResultANDROID {
+    XrTrackableTypeANDROID    type;
+    XrTrackableANDROID        trackable;
+    XrPosef                   pose;
+} XrRaycastHitResultANDROID;
+
+typedef struct XrRaycastHitResultsANDROID {
+    XrStructureType               type;
+    void* XR_MAY_ALIAS            next;
+    uint32_t                      resultsCapacityInput;
+    uint32_t                      resultsCountOutput;
+    XrRaycastHitResultANDROID*    results;
+} XrRaycastHitResultsANDROID;
+
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateRaycastSupportedTrackableTypesANDROID)(XrInstance instance, XrSystemId systemId, uint32_t trackableTypeCapacityInput, uint32_t* trackableTypeCountOutput, XrTrackableTypeANDROID* trackableTypes);
+typedef XrResult (XRAPI_PTR *PFN_xrRaycastANDROID)(XrSession session, const XrRaycastInfoANDROID* rayInfo, XrRaycastHitResultsANDROID* results);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateRaycastSupportedTrackableTypesANDROID(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    uint32_t                                    trackableTypeCapacityInput,
+    uint32_t*                                   trackableTypeCountOutput,
+    XrTrackableTypeANDROID*                     trackableTypes);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrRaycastANDROID(
+    XrSession                                   session,
+    const XrRaycastInfoANDROID*                 rayInfo,
+    XrRaycastHitResultsANDROID*                 results);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_ANDROID_trackables_object is a preprocessor guard. Do not pass it to API calls.
+#define XR_ANDROID_trackables_object 1
+#define XR_ANDROID_trackables_object_SPEC_VERSION 1
+#define XR_ANDROID_TRACKABLES_OBJECT_EXTENSION_NAME "XR_ANDROID_trackables_object"
+
+typedef enum XrObjectLabelANDROID {
+    XR_OBJECT_LABEL_UNKNOWN_ANDROID = 0,
+    XR_OBJECT_LABEL_KEYBOARD_ANDROID = 1,
+    XR_OBJECT_LABEL_MOUSE_ANDROID = 2,
+    XR_OBJECT_LABEL_LAPTOP_ANDROID = 3,
+    XR_OBJECT_LABEL_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrObjectLabelANDROID;
+typedef struct XrTrackableObjectANDROID {
+    XrStructureType           type;
+    void* XR_MAY_ALIAS        next;
+    XrTrackingStateANDROID    trackingState;
+    XrPosef                   centerPose;
+    XrExtent3DfEXT            extents;
+    XrObjectLabelANDROID      objectLabel;
+    XrTime                    lastUpdatedTime;
+} XrTrackableObjectANDROID;
+
+// XrTrackableObjectConfigurationANDROID extends XrTrackableTrackerCreateInfoANDROID
+typedef struct XrTrackableObjectConfigurationANDROID {
+    XrStructureType                type;
+    void* XR_MAY_ALIAS             next;
+    uint32_t                       labelCount;
+    const XrObjectLabelANDROID*    activeLabels;
+} XrTrackableObjectConfigurationANDROID;
+
+typedef XrResult (XRAPI_PTR *PFN_xrGetTrackableObjectANDROID)(XrTrackableTrackerANDROID tracker, const XrTrackableGetInfoANDROID* getInfo, XrTrackableObjectANDROID* objectOutput);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrGetTrackableObjectANDROID(
+    XrTrackableTrackerANDROID                   tracker,
+    const XrTrackableGetInfoANDROID*            getInfo,
+    XrTrackableObjectANDROID*                   objectOutput);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
 
 
 // XR_EXT_future is a preprocessor guard. Do not pass it to API calls.
@@ -9347,10 +10168,838 @@ typedef struct XrSpaceGroupUuidFilterInfoMETA {
 
 
 
+// XR_ANDROID_trackables_marker is a preprocessor guard. Do not pass it to API calls.
+#define XR_ANDROID_trackables_marker 1
+#define XR_ANDROID_trackables_marker_SPEC_VERSION 1
+#define XR_ANDROID_TRACKABLES_MARKER_EXTENSION_NAME "XR_ANDROID_trackables_marker"
+
+typedef enum XrTrackableMarkerTrackingModeANDROID {
+    XR_TRACKABLE_MARKER_TRACKING_MODE_DYNAMIC_ANDROID = 0,
+    XR_TRACKABLE_MARKER_TRACKING_MODE_STATIC_ANDROID = 1,
+    XR_TRACKABLE_MARKER_TRACKING_MODE_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrTrackableMarkerTrackingModeANDROID;
+
+typedef enum XrTrackableMarkerDictionaryANDROID {
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_4X4_50_ANDROID = 0,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_4X4_100_ANDROID = 1,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_4X4_250_ANDROID = 2,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_4X4_1000_ANDROID = 3,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_5X5_50_ANDROID = 4,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_5X5_100_ANDROID = 5,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_5X5_250_ANDROID = 6,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_5X5_1000_ANDROID = 7,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_6X6_50_ANDROID = 8,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_6X6_100_ANDROID = 9,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_6X6_250_ANDROID = 10,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_6X6_1000_ANDROID = 11,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_7X7_50_ANDROID = 12,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_7X7_100_ANDROID = 13,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_7X7_250_ANDROID = 14,
+    XR_TRACKABLE_MARKER_DICTIONARY_ARUCO_7X7_1000_ANDROID = 15,
+    XR_TRACKABLE_MARKER_DICTIONARY_APRILTAG_16H5_ANDROID = 16,
+    XR_TRACKABLE_MARKER_DICTIONARY_APRILTAG_25H9_ANDROID = 17,
+    XR_TRACKABLE_MARKER_DICTIONARY_APRILTAG_36H10_ANDROID = 18,
+    XR_TRACKABLE_MARKER_DICTIONARY_APRILTAG_36H11_ANDROID = 19,
+    XR_TRACKABLE_MARKER_DICTIONARY_MAX_ENUM_ANDROID = 0x7FFFFFFF
+} XrTrackableMarkerDictionaryANDROID;
+// XrSystemMarkerTrackingPropertiesANDROID extends XrSystemProperties
+typedef struct XrSystemMarkerTrackingPropertiesANDROID {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    XrBool32              supportsMarkerTracking;
+    XrBool32              supportsMarkerSizeEstimation;
+    uint16_t              maxMarkerCount;
+} XrSystemMarkerTrackingPropertiesANDROID;
+
+typedef struct XrTrackableMarkerDatabaseEntryANDROID {
+    int32_t    id;
+    float      edgeSize;
+} XrTrackableMarkerDatabaseEntryANDROID;
+
+typedef struct XrTrackableMarkerDatabaseANDROID {
+    XrTrackableMarkerDictionaryANDROID              dictionary;
+    uint32_t                                        entryCount;
+    const XrTrackableMarkerDatabaseEntryANDROID*    entries;
+} XrTrackableMarkerDatabaseANDROID;
+
+// XrTrackableMarkerConfigurationANDROID extends XrTrackableTrackerCreateInfoANDROID
+typedef struct XrTrackableMarkerConfigurationANDROID {
+    XrStructureType                            type;
+    void* XR_MAY_ALIAS                         next;
+    XrTrackableMarkerTrackingModeANDROID       trackingMode;
+    uint32_t                                   databaseCount;
+    const XrTrackableMarkerDatabaseANDROID*    databases;
+} XrTrackableMarkerConfigurationANDROID;
+
+typedef struct XrTrackableMarkerANDROID {
+    XrStructureType                       type;
+    void* XR_MAY_ALIAS                    next;
+    XrTrackingStateANDROID                trackingState;
+    XrTime                                lastUpdatedTime;
+    XrTrackableMarkerDictionaryANDROID    dictionary;
+    int32_t                               markerId;
+    XrPosef                               centerPose;
+    XrExtent2Df                           extents;
+} XrTrackableMarkerANDROID;
+
+typedef XrResult (XRAPI_PTR *PFN_xrGetTrackableMarkerANDROID)(XrTrackableTrackerANDROID tracker, const XrTrackableGetInfoANDROID* getInfo, XrTrackableMarkerANDROID* markerOutput);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrGetTrackableMarkerANDROID(
+    XrTrackableTrackerANDROID                   tracker,
+    const XrTrackableGetInfoANDROID*            getInfo,
+    XrTrackableMarkerANDROID*                   markerOutput);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_EXT_spatial_entity is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_spatial_entity 1
+
+#define XR_NULL_SPATIAL_ENTITY_ID_EXT 0
+
+
+#define XR_NULL_SPATIAL_BUFFER_ID_EXT 0
+
+XR_DEFINE_ATOM(XrSpatialEntityIdEXT)
+XR_DEFINE_ATOM(XrSpatialBufferIdEXT)
+XR_DEFINE_HANDLE(XrSpatialEntityEXT)
+XR_DEFINE_HANDLE(XrSpatialContextEXT)
+XR_DEFINE_HANDLE(XrSpatialSnapshotEXT)
+#define XR_EXT_spatial_entity_SPEC_VERSION 1
+#define XR_EXT_SPATIAL_ENTITY_EXTENSION_NAME "XR_EXT_spatial_entity"
+
+typedef enum XrSpatialCapabilityEXT {
+    XR_SPATIAL_CAPABILITY_PLANE_TRACKING_EXT = 1000741000,
+    XR_SPATIAL_CAPABILITY_MARKER_TRACKING_QR_CODE_EXT = 1000743000,
+    XR_SPATIAL_CAPABILITY_MARKER_TRACKING_MICRO_QR_CODE_EXT = 1000743001,
+    XR_SPATIAL_CAPABILITY_MARKER_TRACKING_ARUCO_MARKER_EXT = 1000743002,
+    XR_SPATIAL_CAPABILITY_MARKER_TRACKING_APRIL_TAG_EXT = 1000743003,
+    XR_SPATIAL_CAPABILITY_ANCHOR_EXT = 1000762000,
+    XR_SPATIAL_CAPABILITY_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialCapabilityEXT;
+
+typedef enum XrSpatialCapabilityFeatureEXT {
+    XR_SPATIAL_CAPABILITY_FEATURE_MARKER_TRACKING_FIXED_SIZE_MARKERS_EXT = 1000743000,
+    XR_SPATIAL_CAPABILITY_FEATURE_MARKER_TRACKING_STATIC_MARKERS_EXT = 1000743001,
+    XR_SPATIAL_CAPABILITY_FEATURE_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialCapabilityFeatureEXT;
+
+typedef enum XrSpatialComponentTypeEXT {
+    XR_SPATIAL_COMPONENT_TYPE_BOUNDED_2D_EXT = 1,
+    XR_SPATIAL_COMPONENT_TYPE_BOUNDED_3D_EXT = 2,
+    XR_SPATIAL_COMPONENT_TYPE_PARENT_EXT = 3,
+    XR_SPATIAL_COMPONENT_TYPE_MESH_3D_EXT = 4,
+    XR_SPATIAL_COMPONENT_TYPE_PLANE_ALIGNMENT_EXT = 1000741000,
+    XR_SPATIAL_COMPONENT_TYPE_MESH_2D_EXT = 1000741001,
+    XR_SPATIAL_COMPONENT_TYPE_POLYGON_2D_EXT = 1000741002,
+    XR_SPATIAL_COMPONENT_TYPE_PLANE_SEMANTIC_LABEL_EXT = 1000741003,
+    XR_SPATIAL_COMPONENT_TYPE_MARKER_EXT = 1000743000,
+    XR_SPATIAL_COMPONENT_TYPE_ANCHOR_EXT = 1000762000,
+    XR_SPATIAL_COMPONENT_TYPE_PERSISTENCE_EXT = 1000763000,
+    XR_SPATIAL_COMPONENT_TYPE_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialComponentTypeEXT;
+
+typedef enum XrSpatialEntityTrackingStateEXT {
+    XR_SPATIAL_ENTITY_TRACKING_STATE_STOPPED_EXT = 1,
+    XR_SPATIAL_ENTITY_TRACKING_STATE_PAUSED_EXT = 2,
+    XR_SPATIAL_ENTITY_TRACKING_STATE_TRACKING_EXT = 3,
+    XR_SPATIAL_ENTITY_TRACKING_STATE_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialEntityTrackingStateEXT;
+
+typedef enum XrSpatialBufferTypeEXT {
+    XR_SPATIAL_BUFFER_TYPE_UNKNOWN_EXT = 0,
+    XR_SPATIAL_BUFFER_TYPE_STRING_EXT = 1,
+    XR_SPATIAL_BUFFER_TYPE_UINT8_EXT = 2,
+    XR_SPATIAL_BUFFER_TYPE_UINT16_EXT = 3,
+    XR_SPATIAL_BUFFER_TYPE_UINT32_EXT = 4,
+    XR_SPATIAL_BUFFER_TYPE_FLOAT_EXT = 5,
+    XR_SPATIAL_BUFFER_TYPE_VECTOR2F_EXT = 6,
+    XR_SPATIAL_BUFFER_TYPE_VECTOR3F_EXT = 7,
+    XR_SPATIAL_BUFFER_TYPE_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialBufferTypeEXT;
+typedef struct XrSpatialCapabilityComponentTypesEXT {
+    XrStructureType               type;
+    void* XR_MAY_ALIAS            next;
+    uint32_t                      componentTypeCapacityInput;
+    uint32_t                      componentTypeCountOutput;
+    XrSpatialComponentTypeEXT*    componentTypes;
+} XrSpatialCapabilityComponentTypesEXT;
+
+typedef struct XR_MAY_ALIAS XrSpatialCapabilityConfigurationBaseHeaderEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+} XrSpatialCapabilityConfigurationBaseHeaderEXT;
+
+typedef struct XrSpatialContextCreateInfoEXT {
+    XrStructureType                                                type;
+    const void* XR_MAY_ALIAS                                       next;
+    uint32_t                                                       capabilityConfigCount;
+    const XrSpatialCapabilityConfigurationBaseHeaderEXT* const*    capabilityConfigs;
+} XrSpatialContextCreateInfoEXT;
+
+typedef struct XrCreateSpatialContextCompletionEXT {
+    XrStructureType        type;
+    void* XR_MAY_ALIAS     next;
+    XrResult               futureResult;
+    XrSpatialContextEXT    spatialContext;
+} XrCreateSpatialContextCompletionEXT;
+
+typedef struct XrSpatialDiscoverySnapshotCreateInfoEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    uint32_t                            componentTypeCount;
+    const XrSpatialComponentTypeEXT*    componentTypes;
+} XrSpatialDiscoverySnapshotCreateInfoEXT;
+
+typedef struct XrCreateSpatialDiscoverySnapshotCompletionInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpace                     baseSpace;
+    XrTime                      time;
+    XrFutureEXT                 future;
+} XrCreateSpatialDiscoverySnapshotCompletionInfoEXT;
+
+typedef struct XrCreateSpatialDiscoverySnapshotCompletionEXT {
+    XrStructureType         type;
+    void* XR_MAY_ALIAS      next;
+    XrResult                futureResult;
+    XrSpatialSnapshotEXT    snapshot;
+} XrCreateSpatialDiscoverySnapshotCompletionEXT;
+
+typedef struct XrSpatialComponentDataQueryConditionEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    uint32_t                            componentTypeCount;
+    const XrSpatialComponentTypeEXT*    componentTypes;
+} XrSpatialComponentDataQueryConditionEXT;
+
+typedef struct XrSpatialComponentDataQueryResultEXT {
+    XrStructureType                     type;
+    void* XR_MAY_ALIAS                  next;
+    uint32_t                            entityIdCapacityInput;
+    uint32_t                            entityIdCountOutput;
+    XrSpatialEntityIdEXT*               entityIds;
+    uint32_t                            entityStateCapacityInput;
+    uint32_t                            entityStateCountOutput;
+    XrSpatialEntityTrackingStateEXT*    entityStates;
+} XrSpatialComponentDataQueryResultEXT;
+
+typedef struct XrSpatialBufferEXT {
+    XrSpatialBufferIdEXT      bufferId;
+    XrSpatialBufferTypeEXT    bufferType;
+} XrSpatialBufferEXT;
+
+typedef struct XrSpatialBufferGetInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpatialBufferIdEXT        bufferId;
+} XrSpatialBufferGetInfoEXT;
+
+typedef struct XrSpatialBounded2DDataEXT {
+    XrPosef        center;
+    XrExtent2Df    extents;
+} XrSpatialBounded2DDataEXT;
+
+// XrSpatialComponentBounded2DListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentBounded2DListEXT {
+    XrStructureType               type;
+    void* XR_MAY_ALIAS            next;
+    uint32_t                      boundCount;
+    XrSpatialBounded2DDataEXT*    bounds;
+} XrSpatialComponentBounded2DListEXT;
+
+// XrSpatialComponentBounded3DListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentBounded3DListEXT {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    uint32_t              boundCount;
+    XrBoxf*               bounds;
+} XrSpatialComponentBounded3DListEXT;
+
+// XrSpatialComponentParentListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentParentListEXT {
+    XrStructureType          type;
+    void* XR_MAY_ALIAS       next;
+    uint32_t                 parentCount;
+    XrSpatialEntityIdEXT*    parents;
+} XrSpatialComponentParentListEXT;
+
+typedef struct XrSpatialMeshDataEXT {
+    XrPosef               origin;
+    XrSpatialBufferEXT    vertexBuffer;
+    XrSpatialBufferEXT    indexBuffer;
+} XrSpatialMeshDataEXT;
+
+// XrSpatialComponentMesh3DListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentMesh3DListEXT {
+    XrStructureType          type;
+    void* XR_MAY_ALIAS       next;
+    uint32_t                 meshCount;
+    XrSpatialMeshDataEXT*    meshes;
+} XrSpatialComponentMesh3DListEXT;
+
+typedef struct XrSpatialEntityFromIdCreateInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpatialEntityIdEXT        entityId;
+} XrSpatialEntityFromIdCreateInfoEXT;
+
+typedef struct XrSpatialUpdateSnapshotCreateInfoEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    uint32_t                            entityCount;
+    const XrSpatialEntityEXT*           entities;
+    uint32_t                            componentTypeCount;
+    const XrSpatialComponentTypeEXT*    componentTypes;
+    XrSpace                             baseSpace;
+    XrTime                              time;
+} XrSpatialUpdateSnapshotCreateInfoEXT;
+
+typedef struct XrEventDataSpatialDiscoveryRecommendedEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpatialContextEXT         spatialContext;
+} XrEventDataSpatialDiscoveryRecommendedEXT;
+
+// XrSpatialFilterTrackingStateEXT extends XrSpatialDiscoverySnapshotCreateInfoEXT,XrSpatialComponentDataQueryConditionEXT
+typedef struct XrSpatialFilterTrackingStateEXT {
+    XrStructureType                    type;
+    const void* XR_MAY_ALIAS           next;
+    XrSpatialEntityTrackingStateEXT    trackingState;
+} XrSpatialFilterTrackingStateEXT;
+
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSpatialCapabilitiesEXT)(XrInstance instance, XrSystemId systemId, uint32_t capabilityCapacityInput, uint32_t* capabilityCountOutput, XrSpatialCapabilityEXT* capabilities);
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSpatialCapabilityComponentTypesEXT)(XrInstance instance, XrSystemId systemId, XrSpatialCapabilityEXT capability, XrSpatialCapabilityComponentTypesEXT* capabilityComponents);
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSpatialCapabilityFeaturesEXT)(XrInstance instance, XrSystemId systemId, XrSpatialCapabilityEXT capability, uint32_t capabilityFeatureCapacityInput, uint32_t* capabilityFeatureCountOutput, XrSpatialCapabilityFeatureEXT* capabilityFeatures);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialContextAsyncEXT)(XrSession session, const XrSpatialContextCreateInfoEXT* createInfo, XrFutureEXT* future);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialContextCompleteEXT)(XrSession session, XrFutureEXT future, XrCreateSpatialContextCompletionEXT* completion);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroySpatialContextEXT)(XrSpatialContextEXT spatialContext);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialDiscoverySnapshotAsyncEXT)(XrSpatialContextEXT spatialContext, const XrSpatialDiscoverySnapshotCreateInfoEXT* createInfo, XrFutureEXT* future);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialDiscoverySnapshotCompleteEXT)(XrSpatialContextEXT spatialContext, const XrCreateSpatialDiscoverySnapshotCompletionInfoEXT* createSnapshotCompletionInfo, XrCreateSpatialDiscoverySnapshotCompletionEXT* completion);
+typedef XrResult (XRAPI_PTR *PFN_xrQuerySpatialComponentDataEXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialComponentDataQueryConditionEXT* queryCondition, XrSpatialComponentDataQueryResultEXT* queryResult);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroySpatialSnapshotEXT)(XrSpatialSnapshotEXT snapshot);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialEntityFromIdEXT)(XrSpatialContextEXT spatialContext, const XrSpatialEntityFromIdCreateInfoEXT* createInfo, XrSpatialEntityEXT* spatialEntity);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroySpatialEntityEXT)(XrSpatialEntityEXT spatialEntity);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialUpdateSnapshotEXT)(XrSpatialContextEXT spatialContext, const XrSpatialUpdateSnapshotCreateInfoEXT* createInfo, XrSpatialSnapshotEXT* snapshot);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferStringEXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, char* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferUint8EXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, uint8_t* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferUint16EXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, uint16_t* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferUint32EXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, uint32_t* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferFloatEXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, float* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferVector2fEXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, XrVector2f* buffer);
+typedef XrResult (XRAPI_PTR *PFN_xrGetSpatialBufferVector3fEXT)(XrSpatialSnapshotEXT snapshot, const XrSpatialBufferGetInfoEXT* info, uint32_t bufferCapacityInput, uint32_t* bufferCountOutput, XrVector3f* buffer);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSpatialCapabilitiesEXT(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    uint32_t                                    capabilityCapacityInput,
+    uint32_t*                                   capabilityCountOutput,
+    XrSpatialCapabilityEXT*                     capabilities);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSpatialCapabilityComponentTypesEXT(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    XrSpatialCapabilityEXT                      capability,
+    XrSpatialCapabilityComponentTypesEXT*       capabilityComponents);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSpatialCapabilityFeaturesEXT(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    XrSpatialCapabilityEXT                      capability,
+    uint32_t                                    capabilityFeatureCapacityInput,
+    uint32_t*                                   capabilityFeatureCountOutput,
+    XrSpatialCapabilityFeatureEXT*              capabilityFeatures);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialContextAsyncEXT(
+    XrSession                                   session,
+    const XrSpatialContextCreateInfoEXT*        createInfo,
+    XrFutureEXT*                                future);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialContextCompleteEXT(
+    XrSession                                   session,
+    XrFutureEXT                                 future,
+    XrCreateSpatialContextCompletionEXT*        completion);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpatialContextEXT(
+    XrSpatialContextEXT                         spatialContext);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialDiscoverySnapshotAsyncEXT(
+    XrSpatialContextEXT                         spatialContext,
+    const XrSpatialDiscoverySnapshotCreateInfoEXT* createInfo,
+    XrFutureEXT*                                future);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialDiscoverySnapshotCompleteEXT(
+    XrSpatialContextEXT                         spatialContext,
+    const XrCreateSpatialDiscoverySnapshotCompletionInfoEXT* createSnapshotCompletionInfo,
+    XrCreateSpatialDiscoverySnapshotCompletionEXT* completion);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrQuerySpatialComponentDataEXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialComponentDataQueryConditionEXT* queryCondition,
+    XrSpatialComponentDataQueryResultEXT*       queryResult);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpatialSnapshotEXT(
+    XrSpatialSnapshotEXT                        snapshot);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialEntityFromIdEXT(
+    XrSpatialContextEXT                         spatialContext,
+    const XrSpatialEntityFromIdCreateInfoEXT*   createInfo,
+    XrSpatialEntityEXT*                         spatialEntity);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpatialEntityEXT(
+    XrSpatialEntityEXT                          spatialEntity);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialUpdateSnapshotEXT(
+    XrSpatialContextEXT                         spatialContext,
+    const XrSpatialUpdateSnapshotCreateInfoEXT* createInfo,
+    XrSpatialSnapshotEXT*                       snapshot);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferStringEXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    char*                                       buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferUint8EXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    uint8_t*                                    buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferUint16EXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    uint16_t*                                   buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferUint32EXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    uint32_t*                                   buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferFloatEXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    float*                                      buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferVector2fEXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    XrVector2f*                                 buffer);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrGetSpatialBufferVector3fEXT(
+    XrSpatialSnapshotEXT                        snapshot,
+    const XrSpatialBufferGetInfoEXT*            info,
+    uint32_t                                    bufferCapacityInput,
+    uint32_t*                                   bufferCountOutput,
+    XrVector3f*                                 buffer);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_EXT_spatial_plane_tracking is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_spatial_plane_tracking 1
+#define XR_EXT_spatial_plane_tracking_SPEC_VERSION 1
+#define XR_EXT_SPATIAL_PLANE_TRACKING_EXTENSION_NAME "XR_EXT_spatial_plane_tracking"
+
+typedef enum XrSpatialPlaneAlignmentEXT {
+    XR_SPATIAL_PLANE_ALIGNMENT_HORIZONTAL_UPWARD_EXT = 0,
+    XR_SPATIAL_PLANE_ALIGNMENT_HORIZONTAL_DOWNWARD_EXT = 1,
+    XR_SPATIAL_PLANE_ALIGNMENT_VERTICAL_EXT = 2,
+    XR_SPATIAL_PLANE_ALIGNMENT_ARBITRARY_EXT = 3,
+    XR_SPATIAL_PLANE_ALIGNMENT_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialPlaneAlignmentEXT;
+
+typedef enum XrSpatialPlaneSemanticLabelEXT {
+    XR_SPATIAL_PLANE_SEMANTIC_LABEL_UNCATEGORIZED_EXT = 1,
+    XR_SPATIAL_PLANE_SEMANTIC_LABEL_FLOOR_EXT = 2,
+    XR_SPATIAL_PLANE_SEMANTIC_LABEL_WALL_EXT = 3,
+    XR_SPATIAL_PLANE_SEMANTIC_LABEL_CEILING_EXT = 4,
+    XR_SPATIAL_PLANE_SEMANTIC_LABEL_TABLE_EXT = 5,
+    XR_SPATIAL_PLANE_SEMANTIC_LABEL_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialPlaneSemanticLabelEXT;
+typedef struct XrSpatialCapabilityConfigurationPlaneTrackingEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+} XrSpatialCapabilityConfigurationPlaneTrackingEXT;
+
+// XrSpatialComponentPlaneAlignmentListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentPlaneAlignmentListEXT {
+    XrStructureType                type;
+    void* XR_MAY_ALIAS             next;
+    uint32_t                       planeAlignmentCount;
+    XrSpatialPlaneAlignmentEXT*    planeAlignments;
+} XrSpatialComponentPlaneAlignmentListEXT;
+
+// XrSpatialComponentMesh2DListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentMesh2DListEXT {
+    XrStructureType          type;
+    void* XR_MAY_ALIAS       next;
+    uint32_t                 meshCount;
+    XrSpatialMeshDataEXT*    meshes;
+} XrSpatialComponentMesh2DListEXT;
+
+typedef struct XrSpatialPolygon2DDataEXT {
+    XrPosef               origin;
+    XrSpatialBufferEXT    vertexBuffer;
+} XrSpatialPolygon2DDataEXT;
+
+// XrSpatialComponentPolygon2DListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentPolygon2DListEXT {
+    XrStructureType               type;
+    void* XR_MAY_ALIAS            next;
+    uint32_t                      polygonCount;
+    XrSpatialPolygon2DDataEXT*    polygons;
+} XrSpatialComponentPolygon2DListEXT;
+
+// XrSpatialComponentPlaneSemanticLabelListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentPlaneSemanticLabelListEXT {
+    XrStructureType                    type;
+    void* XR_MAY_ALIAS                 next;
+    uint32_t                           semanticLabelCount;
+    XrSpatialPlaneSemanticLabelEXT*    semanticLabels;
+} XrSpatialComponentPlaneSemanticLabelListEXT;
+
+
+
+// XR_EXT_spatial_marker_tracking is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_spatial_marker_tracking 1
+#define XR_EXT_spatial_marker_tracking_SPEC_VERSION 1
+#define XR_EXT_SPATIAL_MARKER_TRACKING_EXTENSION_NAME "XR_EXT_spatial_marker_tracking"
+
+typedef enum XrSpatialMarkerArucoDictEXT {
+    XR_SPATIAL_MARKER_ARUCO_DICT_4X4_50_EXT = 1,
+    XR_SPATIAL_MARKER_ARUCO_DICT_4X4_100_EXT = 2,
+    XR_SPATIAL_MARKER_ARUCO_DICT_4X4_250_EXT = 3,
+    XR_SPATIAL_MARKER_ARUCO_DICT_4X4_1000_EXT = 4,
+    XR_SPATIAL_MARKER_ARUCO_DICT_5X5_50_EXT = 5,
+    XR_SPATIAL_MARKER_ARUCO_DICT_5X5_100_EXT = 6,
+    XR_SPATIAL_MARKER_ARUCO_DICT_5X5_250_EXT = 7,
+    XR_SPATIAL_MARKER_ARUCO_DICT_5X5_1000_EXT = 8,
+    XR_SPATIAL_MARKER_ARUCO_DICT_6X6_50_EXT = 9,
+    XR_SPATIAL_MARKER_ARUCO_DICT_6X6_100_EXT = 10,
+    XR_SPATIAL_MARKER_ARUCO_DICT_6X6_250_EXT = 11,
+    XR_SPATIAL_MARKER_ARUCO_DICT_6X6_1000_EXT = 12,
+    XR_SPATIAL_MARKER_ARUCO_DICT_7X7_50_EXT = 13,
+    XR_SPATIAL_MARKER_ARUCO_DICT_7X7_100_EXT = 14,
+    XR_SPATIAL_MARKER_ARUCO_DICT_7X7_250_EXT = 15,
+    XR_SPATIAL_MARKER_ARUCO_DICT_7X7_1000_EXT = 16,
+    XR_SPATIAL_MARKER_ARUCO_DICT_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialMarkerArucoDictEXT;
+
+typedef enum XrSpatialMarkerAprilTagDictEXT {
+    XR_SPATIAL_MARKER_APRIL_TAG_DICT_16H5_EXT = 1,
+    XR_SPATIAL_MARKER_APRIL_TAG_DICT_25H9_EXT = 2,
+    XR_SPATIAL_MARKER_APRIL_TAG_DICT_36H10_EXT = 3,
+    XR_SPATIAL_MARKER_APRIL_TAG_DICT_36H11_EXT = 4,
+    XR_SPATIAL_MARKER_APRIL_TAG_DICT_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialMarkerAprilTagDictEXT;
+typedef struct XrSpatialCapabilityConfigurationQrCodeEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+} XrSpatialCapabilityConfigurationQrCodeEXT;
+
+typedef struct XrSpatialCapabilityConfigurationMicroQrCodeEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+} XrSpatialCapabilityConfigurationMicroQrCodeEXT;
+
+typedef struct XrSpatialCapabilityConfigurationArucoMarkerEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+    XrSpatialMarkerArucoDictEXT         arUcoDict;
+} XrSpatialCapabilityConfigurationArucoMarkerEXT;
+
+typedef struct XrSpatialCapabilityConfigurationAprilTagEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+    XrSpatialMarkerAprilTagDictEXT      aprilDict;
+} XrSpatialCapabilityConfigurationAprilTagEXT;
+
+// XrSpatialMarkerSizeEXT extends XrSpatialCapabilityConfigurationArucoMarkerEXT,XrSpatialCapabilityConfigurationAprilTagEXT,XrSpatialCapabilityConfigurationQrCodeEXT,XrSpatialCapabilityConfigurationMicroQrCodeEXT
+typedef struct XrSpatialMarkerSizeEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    float                       markerSideLength;
+} XrSpatialMarkerSizeEXT;
+
+// XrSpatialMarkerStaticOptimizationEXT extends XrSpatialCapabilityConfigurationArucoMarkerEXT,XrSpatialCapabilityConfigurationAprilTagEXT,XrSpatialCapabilityConfigurationQrCodeEXT,XrSpatialCapabilityConfigurationMicroQrCodeEXT
+typedef struct XrSpatialMarkerStaticOptimizationEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrBool32                    optimizeForStaticMarker;
+} XrSpatialMarkerStaticOptimizationEXT;
+
+typedef struct XrSpatialMarkerDataEXT {
+    XrSpatialCapabilityEXT    capability;
+    uint32_t                  markerId;
+    XrSpatialBufferEXT        data;
+} XrSpatialMarkerDataEXT;
+
+// XrSpatialComponentMarkerListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentMarkerListEXT {
+    XrStructureType            type;
+    void* XR_MAY_ALIAS         next;
+    uint32_t                   markerCount;
+    XrSpatialMarkerDataEXT*    markers;
+} XrSpatialComponentMarkerListEXT;
+
+
+
 // XR_LOGITECH_mx_ink_stylus_interaction is a preprocessor guard. Do not pass it to API calls.
 #define XR_LOGITECH_mx_ink_stylus_interaction 1
 #define XR_LOGITECH_mx_ink_stylus_interaction_SPEC_VERSION 1
 #define XR_LOGITECH_MX_INK_STYLUS_INTERACTION_EXTENSION_NAME "XR_LOGITECH_mx_ink_stylus_interaction"
+
+
+// XR_EXT_spatial_anchor is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_spatial_anchor 1
+#define XR_EXT_spatial_anchor_SPEC_VERSION 1
+#define XR_EXT_SPATIAL_ANCHOR_EXTENSION_NAME "XR_EXT_spatial_anchor"
+typedef struct XrSpatialCapabilityConfigurationAnchorEXT {
+    XrStructureType                     type;
+    const void* XR_MAY_ALIAS            next;
+    XrSpatialCapabilityEXT              capability;
+    uint32_t                            enabledComponentCount;
+    const XrSpatialComponentTypeEXT*    enabledComponents;
+} XrSpatialCapabilityConfigurationAnchorEXT;
+
+// XrSpatialComponentAnchorListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentAnchorListEXT {
+    XrStructureType       type;
+    void* XR_MAY_ALIAS    next;
+    uint32_t              locationCount;
+    XrPosef*              locations;
+} XrSpatialComponentAnchorListEXT;
+
+typedef struct XrSpatialAnchorCreateInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpace                     baseSpace;
+    XrTime                      time;
+    XrPosef                     pose;
+} XrSpatialAnchorCreateInfoEXT;
+
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialAnchorEXT)(XrSpatialContextEXT spatialContext, const XrSpatialAnchorCreateInfoEXT* createInfo, XrSpatialEntityIdEXT* anchorEntityId, XrSpatialEntityEXT* anchorEntity);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialAnchorEXT(
+    XrSpatialContextEXT                         spatialContext,
+    const XrSpatialAnchorCreateInfoEXT*         createInfo,
+    XrSpatialEntityIdEXT*                       anchorEntityId,
+    XrSpatialEntityEXT*                         anchorEntity);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_EXT_spatial_persistence is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_spatial_persistence 1
+XR_DEFINE_HANDLE(XrSpatialPersistenceContextEXT)
+#define XR_EXT_spatial_persistence_SPEC_VERSION 1
+#define XR_EXT_SPATIAL_PERSISTENCE_EXTENSION_NAME "XR_EXT_spatial_persistence"
+
+typedef enum XrSpatialPersistenceScopeEXT {
+    XR_SPATIAL_PERSISTENCE_SCOPE_SYSTEM_MANAGED_EXT = 1,
+    XR_SPATIAL_PERSISTENCE_SCOPE_LOCAL_ANCHORS_EXT = 1000781000,
+    XR_SPATIAL_PERSISTENCE_SCOPE_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialPersistenceScopeEXT;
+
+typedef enum XrSpatialPersistenceContextResultEXT {
+    XR_SPATIAL_PERSISTENCE_CONTEXT_RESULT_SUCCESS_EXT = 0,
+    XR_SPATIAL_PERSISTENCE_CONTEXT_RESULT_ENTITY_NOT_TRACKING_EXT = -1000781001,
+    XR_SPATIAL_PERSISTENCE_CONTEXT_RESULT_PERSIST_UUID_NOT_FOUND_EXT = -1000781002,
+    XR_SPATIAL_PERSISTENCE_CONTEXT_RESULT_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialPersistenceContextResultEXT;
+
+typedef enum XrSpatialPersistenceStateEXT {
+    XR_SPATIAL_PERSISTENCE_STATE_LOADED_EXT = 1,
+    XR_SPATIAL_PERSISTENCE_STATE_NOT_FOUND_EXT = 2,
+    XR_SPATIAL_PERSISTENCE_STATE_MAX_ENUM_EXT = 0x7FFFFFFF
+} XrSpatialPersistenceStateEXT;
+typedef struct XrSpatialPersistenceContextCreateInfoEXT {
+    XrStructureType                 type;
+    const void* XR_MAY_ALIAS        next;
+    XrSpatialPersistenceScopeEXT    scope;
+} XrSpatialPersistenceContextCreateInfoEXT;
+
+typedef struct XrCreateSpatialPersistenceContextCompletionEXT {
+    XrStructureType                         type;
+    void* XR_MAY_ALIAS                      next;
+    XrResult                                futureResult;
+    XrSpatialPersistenceContextResultEXT    createResult;
+    XrSpatialPersistenceContextEXT          persistenceContext;
+} XrCreateSpatialPersistenceContextCompletionEXT;
+
+// XrSpatialContextPersistenceConfigEXT extends XrSpatialContextCreateInfoEXT
+typedef struct XrSpatialContextPersistenceConfigEXT {
+    XrStructureType                          type;
+    const void* XR_MAY_ALIAS                 next;
+    uint32_t                                 persistenceContextCount;
+    const XrSpatialPersistenceContextEXT*    persistenceContexts;
+} XrSpatialContextPersistenceConfigEXT;
+
+// XrSpatialDiscoveryPersistenceUuidFilterEXT extends XrSpatialDiscoverySnapshotCreateInfoEXT,XrSpatialComponentDataQueryConditionEXT
+typedef struct XrSpatialDiscoveryPersistenceUuidFilterEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    uint32_t                    persistedUuidCount;
+    const XrUuid*               persistedUuids;
+} XrSpatialDiscoveryPersistenceUuidFilterEXT;
+
+typedef struct XrSpatialPersistenceDataEXT {
+    XrUuid                          persistUuid;
+    XrSpatialPersistenceStateEXT    persistState;
+} XrSpatialPersistenceDataEXT;
+
+// XrSpatialComponentPersistenceListEXT extends XrSpatialComponentDataQueryResultEXT
+typedef struct XrSpatialComponentPersistenceListEXT {
+    XrStructureType                 type;
+    void* XR_MAY_ALIAS              next;
+    uint32_t                        persistDataCount;
+    XrSpatialPersistenceDataEXT*    persistData;
+} XrSpatialComponentPersistenceListEXT;
+
+typedef XrResult (XRAPI_PTR *PFN_xrEnumerateSpatialPersistenceScopesEXT)(XrInstance instance, XrSystemId systemId, uint32_t persistenceScopeCapacityInput, uint32_t* persistenceScopeCountOutput, XrSpatialPersistenceScopeEXT* persistenceScopes);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialPersistenceContextAsyncEXT)(XrSession session, const XrSpatialPersistenceContextCreateInfoEXT* createInfo, XrFutureEXT* future);
+typedef XrResult (XRAPI_PTR *PFN_xrCreateSpatialPersistenceContextCompleteEXT)(XrSession session, XrFutureEXT future, XrCreateSpatialPersistenceContextCompletionEXT* completion);
+typedef XrResult (XRAPI_PTR *PFN_xrDestroySpatialPersistenceContextEXT)(XrSpatialPersistenceContextEXT persistenceContext);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrEnumerateSpatialPersistenceScopesEXT(
+    XrInstance                                  instance,
+    XrSystemId                                  systemId,
+    uint32_t                                    persistenceScopeCapacityInput,
+    uint32_t*                                   persistenceScopeCountOutput,
+    XrSpatialPersistenceScopeEXT*               persistenceScopes);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialPersistenceContextAsyncEXT(
+    XrSession                                   session,
+    const XrSpatialPersistenceContextCreateInfoEXT* createInfo,
+    XrFutureEXT*                                future);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrCreateSpatialPersistenceContextCompleteEXT(
+    XrSession                                   session,
+    XrFutureEXT                                 future,
+    XrCreateSpatialPersistenceContextCompletionEXT* completion);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrDestroySpatialPersistenceContextEXT(
+    XrSpatialPersistenceContextEXT              persistenceContext);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_EXT_spatial_persistence_operations is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_spatial_persistence_operations 1
+#define XR_EXT_spatial_persistence_operations_SPEC_VERSION 1
+#define XR_EXT_SPATIAL_PERSISTENCE_OPERATIONS_EXTENSION_NAME "XR_EXT_spatial_persistence_operations"
+typedef struct XrSpatialEntityPersistInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrSpatialContextEXT         spatialContext;
+    XrSpatialEntityIdEXT        spatialEntityId;
+} XrSpatialEntityPersistInfoEXT;
+
+typedef struct XrPersistSpatialEntityCompletionEXT {
+    XrStructureType                         type;
+    void* XR_MAY_ALIAS                      next;
+    XrResult                                futureResult;
+    XrSpatialPersistenceContextResultEXT    persistResult;
+    XrUuid                                  persistUuid;
+} XrPersistSpatialEntityCompletionEXT;
+
+typedef struct XrSpatialEntityUnpersistInfoEXT {
+    XrStructureType             type;
+    const void* XR_MAY_ALIAS    next;
+    XrUuid                      persistUuid;
+} XrSpatialEntityUnpersistInfoEXT;
+
+typedef struct XrUnpersistSpatialEntityCompletionEXT {
+    XrStructureType                         type;
+    void* XR_MAY_ALIAS                      next;
+    XrResult                                futureResult;
+    XrSpatialPersistenceContextResultEXT    unpersistResult;
+} XrUnpersistSpatialEntityCompletionEXT;
+
+typedef XrResult (XRAPI_PTR *PFN_xrPersistSpatialEntityAsyncEXT)(XrSpatialPersistenceContextEXT persistenceContext, const XrSpatialEntityPersistInfoEXT* persistInfo, XrFutureEXT* future);
+typedef XrResult (XRAPI_PTR *PFN_xrPersistSpatialEntityCompleteEXT)(XrSpatialPersistenceContextEXT persistenceContext, XrFutureEXT future, XrPersistSpatialEntityCompletionEXT* completion);
+typedef XrResult (XRAPI_PTR *PFN_xrUnpersistSpatialEntityAsyncEXT)(XrSpatialPersistenceContextEXT persistenceContext, const XrSpatialEntityUnpersistInfoEXT* unpersistInfo, XrFutureEXT* future);
+typedef XrResult (XRAPI_PTR *PFN_xrUnpersistSpatialEntityCompleteEXT)(XrSpatialPersistenceContextEXT persistenceContext, XrFutureEXT future, XrUnpersistSpatialEntityCompletionEXT* completion);
+
+#ifndef XR_NO_PROTOTYPES
+#ifdef XR_EXTENSION_PROTOTYPES
+XRAPI_ATTR XrResult XRAPI_CALL xrPersistSpatialEntityAsyncEXT(
+    XrSpatialPersistenceContextEXT              persistenceContext,
+    const XrSpatialEntityPersistInfoEXT*        persistInfo,
+    XrFutureEXT*                                future);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrPersistSpatialEntityCompleteEXT(
+    XrSpatialPersistenceContextEXT              persistenceContext,
+    XrFutureEXT                                 future,
+    XrPersistSpatialEntityCompletionEXT*        completion);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrUnpersistSpatialEntityAsyncEXT(
+    XrSpatialPersistenceContextEXT              persistenceContext,
+    const XrSpatialEntityUnpersistInfoEXT*      unpersistInfo,
+    XrFutureEXT*                                future);
+
+XRAPI_ATTR XrResult XRAPI_CALL xrUnpersistSpatialEntityCompleteEXT(
+    XrSpatialPersistenceContextEXT              persistenceContext,
+    XrFutureEXT                                 future,
+    XrUnpersistSpatialEntityCompletionEXT*      completion);
+#endif /* XR_EXTENSION_PROTOTYPES */
+#endif /* !XR_NO_PROTOTYPES */
+
+
+// XR_EXT_loader_init_properties is a preprocessor guard. Do not pass it to API calls.
+#define XR_EXT_loader_init_properties 1
+#define XR_EXT_loader_init_properties_SPEC_VERSION 1
+#define XR_EXT_LOADER_INIT_PROPERTIES_EXTENSION_NAME "XR_EXT_loader_init_properties"
+typedef struct XrLoaderInitPropertyValueEXT {
+    const char*    name;
+    const char*    value;
+} XrLoaderInitPropertyValueEXT;
+
+// XrLoaderInitInfoPropertiesEXT extends XrLoaderInitInfoBaseHeaderKHR
+typedef struct XrLoaderInitInfoPropertiesEXT {
+    XrStructureType                        type;
+    const void* XR_MAY_ALIAS               next;
+    uint32_t                               propertyValueCount;
+    const XrLoaderInitPropertyValueEXT*    propertyValues;
+} XrLoaderInitInfoPropertiesEXT;
+
 
 #ifdef __cplusplus
 }

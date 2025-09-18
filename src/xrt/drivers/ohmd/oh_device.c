@@ -326,7 +326,7 @@ oh_device_update_inputs(struct xrt_device *xdev)
 	return XRT_SUCCESS;
 }
 
-static void
+static xrt_result_t
 oh_device_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
 {
 	struct oh_device *ohd = oh_device(xdev);
@@ -342,12 +342,16 @@ oh_device_set_output(struct xrt_device *xdev, enum xrt_output_name name, const s
 		frequency = DEFAULT_HAPTIC_FREQ;
 	}
 
-	ohmd_device_set_haptics_on(ohd->dev, (float)value->vibration.duration_ns / 1e9f, frequency,
-	                           value->vibration.amplitude);
+	int result = ohmd_device_set_haptics_on(ohd->dev, (float)value->vibration.duration_ns / 1e9f, frequency,
+	                                        value->vibration.amplitude);
+	if (result == -1) {
+		return XRT_ERROR_OUTPUT_REQUEST_FAILURE;
+	}
 #else
 	// There is no official OpenHMD Haptic API.
 	(void)ohd;
 #endif
+	return XRT_SUCCESS;
 }
 
 static bool
@@ -1030,8 +1034,8 @@ create_hmd(ohmd_context *ctx, int device_idx, int device_flags)
 		u_device_dump_config(&ohd->base, __func__, prod);
 	}
 
-	ohd->base.orientation_tracking_supported = (device_flags & OHMD_DEVICE_FLAGS_ROTATIONAL_TRACKING) != 0;
-	ohd->base.position_tracking_supported = (device_flags & OHMD_DEVICE_FLAGS_POSITIONAL_TRACKING) != 0;
+	ohd->base.supported.orientation_tracking = (device_flags & OHMD_DEVICE_FLAGS_ROTATIONAL_TRACKING) != 0;
+	ohd->base.supported.position_tracking = (device_flags & OHMD_DEVICE_FLAGS_POSITIONAL_TRACKING) != 0;
 	ohd->base.device_type = XRT_DEVICE_TYPE_HMD;
 
 
@@ -1157,8 +1161,8 @@ create_controller(ohmd_context *ctx, int device_idx, int device_flags, enum xrt_
 	snprintf(ohd->base.str, XRT_DEVICE_NAME_LEN, "%s (OpenHMD)", prod);
 	snprintf(ohd->base.serial, XRT_DEVICE_NAME_LEN, "%s (OpenHMD)", prod);
 
-	ohd->base.orientation_tracking_supported = (device_flags & OHMD_DEVICE_FLAGS_ROTATIONAL_TRACKING) != 0;
-	ohd->base.position_tracking_supported = (device_flags & OHMD_DEVICE_FLAGS_POSITIONAL_TRACKING) != 0;
+	ohd->base.supported.orientation_tracking = (device_flags & OHMD_DEVICE_FLAGS_ROTATIONAL_TRACKING) != 0;
+	ohd->base.supported.position_tracking = (device_flags & OHMD_DEVICE_FLAGS_POSITIONAL_TRACKING) != 0;
 	ohd->base.device_type = device_type;
 
 	ohmd_device_geti(ohd->dev, OHMD_CONTROLS_HINTS, ohd->controls_fn);
@@ -1217,7 +1221,11 @@ oh_device_create(ohmd_context *ctx, bool no_hmds, struct xrt_device **out_xdevs)
 		} else if (strncmp(prod, "Rift S", strlen("Rift S")) == 0) {
 			U_LOG_W("Ignoring OpenHMD Rift S device idx %i. Use the native Monado Rift S driver.", i);
 			continue;
-		}
+		} /*
+		else if (strncmp(prod, "Rift (DK2)", strlen("Rift (DK2)")) == 0) {
+		        U_LOG_W("Ignoring OpenHMD Rift DK2 device idx %i. Use the native Monado Rift DK2 driver.", i);
+		        continue;
+		} */ // This block of code is disabled until 6dof support is upstreamed.
 
 		if (device_class == OHMD_DEVICE_CLASS_CONTROLLER) {
 			if ((device_flags & OHMD_DEVICE_FLAGS_LEFT_CONTROLLER) != 0) {
@@ -1271,7 +1279,7 @@ oh_device_create(ohmd_context *ctx, bool no_hmds, struct xrt_device **out_xdevs)
 
 			sys->devices[OHMD_HMD_INDEX] = hmd;
 
-			if (hmd->base.position_tracking_supported) {
+			if (hmd->base.supported.position_tracking) {
 				sys->base.type = XRT_TRACKING_TYPE_OTHER;
 			}
 

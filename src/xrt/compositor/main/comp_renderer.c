@@ -1,4 +1,5 @@
 // Copyright 2019-2024, Collabora, Ltd.
+// Copyright 2024-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -30,6 +31,7 @@
 #include "util/u_frame_times_widget.h"
 
 #include "util/comp_render.h"
+#include "util/comp_high_level_render.h"
 
 #include "main/comp_frame.h"
 #include "main/comp_mirror_to_debug_gui.h"
@@ -104,18 +106,6 @@ struct comp_renderer
 
 	struct comp_mirror_to_debug_gui mirror_to_debug_gui;
 
-	//! Render pass for graphics pipeline rendering to the scratch buffer.
-	struct render_gfx_render_pass scratch_render_pass;
-
-	struct
-	{
-		struct
-		{
-			//! Targets for rendering to the scratch buffer.
-			struct render_gfx_target_resources targets[COMP_SCRATCH_NUM_IMAGES];
-		} views[XRT_MAX_VIEWS];
-	} scratch;
-
 	//! @}
 
 	//! @name Image-dependent members
@@ -153,52 +143,6 @@ struct comp_renderer
 	//! @}
 };
 
-struct comp_scratch_view_state
-{
-	uint32_t index;
-
-	bool used;
-};
-
-/// Holds an array of @ref comp_scratch_view_state to match the number of views
-struct comp_render_scratch_state
-{
-	struct comp_scratch_view_state views[2];
-};
-
-
-/*
- *
- * Scratch helpers.
- *
- */
-
-/// Zeroes the object pointed to by @p crss then populates it with the image indices.
-static void
-scratch_get_init(struct comp_render_scratch_state *crss, struct comp_renderer *r, uint32_t view_count)
-{
-	struct comp_compositor *c = r->c;
-	U_ZERO(crss);
-
-	for (uint32_t i = 0; i < view_count; i++) {
-		comp_scratch_single_images_get(&c->scratch.views[i], &crss->views[i].index);
-	}
-}
-
-/// Calls done or discard on each view in @p crss, depending on whether "used" is set.
-static void
-scratch_get_fini(struct comp_render_scratch_state *crss, struct comp_renderer *r, uint32_t view_count)
-{
-	struct comp_compositor *c = r->c;
-
-	for (uint32_t i = 0; i < view_count; i++) {
-		if (crss->views[i].used) {
-			comp_scratch_single_images_done(&c->scratch.views[i]);
-		} else {
-			comp_scratch_single_images_discard(&c->scratch.views[i]);
-		}
-	}
-}
 
 /*
  *
@@ -311,7 +255,7 @@ calc_pose_data(struct comp_renderer *r,
 	struct xrt_fov xdev_fovs[XRT_MAX_VIEWS] = XRT_STRUCT_INIT;
 	struct xrt_pose xdev_poses[XRT_MAX_VIEWS] = XRT_STRUCT_INIT;
 
-	xrt_device_get_view_poses(                           //
+	xrt_result_t xret = xrt_device_get_view_poses(       //
 	    r->c->xdev,                                      //
 	    &default_eye_relation,                           //
 	    r->c->frame.rendering.predicted_display_time_ns, // at_timestamp_ns
@@ -319,6 +263,13 @@ calc_pose_data(struct comp_renderer *r,
 	    &head_relation,                                  // out_head_relation
 	    xdev_fovs,                                       // out_fovs
 	    xdev_poses);                                     // out_poses
+	if (xret != XRT_SUCCESS) {
+		struct u_pp_sink_stack_only sink;
+		u_pp_delegate_t dg = u_pp_sink_stack_only_init(&sink);
+		u_pp_xrt_result(dg, xret);
+		U_LOG_E("xrt_device_get_view_poses failed: %s", sink.buffer);
+		return;
+	}
 
 	struct xrt_fov dist_fov[XRT_MAX_VIEWS] = XRT_STRUCT_INIT;
 	for (uint32_t i = 0; i < view_count; i++) {
@@ -395,12 +346,12 @@ renderer_create_renderings_and_fences(struct comp_renderer *r)
 	if (!use_compute) {
 		r->rtr_array = U_TYPED_ARRAY_CALLOC(struct render_gfx_target_resources, r->buffer_count);
 
-		render_gfx_render_pass_init(          //
-		    &r->target_render_pass,           // rgrp
-		    &r->c->nr,                        // struct render_resources
-		    r->c->target->format,             //
-		    VK_ATTACHMENT_LOAD_OP_CLEAR,      // load_op
-		    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR); // final_layout
+		render_gfx_render_pass_init(     //
+		    &r->target_render_pass,      // rgrp
+		    &r->c->nr,                   // struct render_resources
+		    r->c->target->format,        //
+		    VK_ATTACHMENT_LOAD_OP_CLEAR, // load_op
+		    r->c->target->final_layout); // final_layout
 
 		for (uint32_t i = 0; i < r->buffer_count; ++i) {
 			renderer_build_rendering_target_resources(r, &r->rtr_array[i], i);
@@ -556,7 +507,6 @@ static void
 renderer_init(struct comp_renderer *r, struct comp_compositor *c, VkExtent2D scratch_extent)
 {
 	COMP_TRACE_MARKER();
-	bool bret;
 
 	r->c = c;
 	r->settings = &c->settings;
@@ -565,31 +515,16 @@ renderer_init(struct comp_renderer *r, struct comp_compositor *c, VkExtent2D scr
 	r->fenced_buffer = -1;
 	r->rtr_array = NULL;
 
-	// Shared render pass between all scratch images.
-	render_gfx_render_pass_init(                   //
-	    &r->scratch_render_pass,                   // rgrp
-	    &r->c->nr,                                 // struct render_resources
-	    VK_FORMAT_R8G8B8A8_SRGB,                   // format
-	    VK_ATTACHMENT_LOAD_OP_CLEAR,               // load_op
-	    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); // final_layout
-
-	for (uint32_t i = 0; i < c->nr.view_count; i++) {
-		bret = comp_scratch_single_images_ensure(&r->c->scratch.views[i], &r->c->base.vk, scratch_extent);
-		if (!bret) {
-			COMP_ERROR(c, "comp_scratch_single_images_ensure: false");
-			assert(false && "Whelp, can't return an error. But should never really fail.");
-		}
-
-		for (uint32_t k = 0; k < COMP_SCRATCH_NUM_IMAGES; k++) {
-			struct render_scratch_color_image *rsci = &c->scratch.views[i].images[k];
-
-			render_gfx_target_resources_init(    //
-			    &r->scratch.views[i].targets[k], //
-			    &r->c->nr,                       //
-			    &r->scratch_render_pass,         //
-			    rsci->srgb_view,                 //
-			    scratch_extent);                 //
-		}
+	// Setup the scratch images.
+	bool bret = chl_scratch_ensure( //
+	    &c->scratch,                // scratch
+	    &c->nr,                     // struct render_resources
+	    c->nr.view_count,           // view_count
+	    scratch_extent,             // extent
+	    VK_FORMAT_R8G8B8A8_SRGB);   // format
+	if (!bret) {
+		COMP_ERROR(c, "chl_scratch_ensure: false");
+		assert(bret && "Whelp, can't return a error. But should never really fail.");
 	}
 
 	// Try to early-allocate these, in case we can.
@@ -673,12 +608,22 @@ renderer_submit_queue(struct comp_renderer *r, VkCommandBuffer cmd, VkPipelineSt
 		wait_sem_count = WAIT_SEMAPHORE_COUNT;
 	}
 
+#define SIGNAL_SEMAPHRE_COUNT 1
+	VkSemaphore signal_sems[SIGNAL_SEMAPHRE_COUNT] = {ct->semaphores.render_complete};
+
+	uint32_t signal_sem_count = 0;
+	VkSemaphore *signal_sems_ptr = NULL;
+	if (signal_sems[0] != VK_NULL_HANDLE) {
+		signal_sems_ptr = signal_sems;
+		signal_sem_count = SIGNAL_SEMAPHRE_COUNT;
+	}
+
 	// Next pointer for VkSubmitInfo
 	const void *next = NULL;
 
 #ifdef VK_KHR_timeline_semaphore
 	assert(!comp_frame_is_invalid_locked(&r->c->frame.rendering));
-	uint64_t render_complete_signal_values[WAIT_SEMAPHORE_COUNT] = {(uint64_t)frame_id};
+	uint64_t render_complete_signal_values[SIGNAL_SEMAPHRE_COUNT] = {(uint64_t)frame_id};
 
 	VkTimelineSemaphoreSubmitInfoKHR timeline_info = {
 	    .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR,
@@ -687,7 +632,7 @@ renderer_submit_queue(struct comp_renderer *r, VkCommandBuffer cmd, VkPipelineSt
 	if (ct->semaphores.render_complete_is_timeline) {
 		timeline_info = (VkTimelineSemaphoreSubmitInfoKHR){
 		    .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR,
-		    .signalSemaphoreValueCount = WAIT_SEMAPHORE_COUNT,
+		    .signalSemaphoreValueCount = signal_sem_count,
 		    .pSignalSemaphoreValues = render_complete_signal_values,
 		};
 
@@ -704,8 +649,8 @@ renderer_submit_queue(struct comp_renderer *r, VkCommandBuffer cmd, VkPipelineSt
 	    .waitSemaphoreCount = wait_sem_count,
 	    .commandBufferCount = 1,
 	    .pCommandBuffers = &cmd,
-	    .signalSemaphoreCount = 1,
-	    .pSignalSemaphores = &ct->semaphores.render_complete,
+	    .signalSemaphoreCount = signal_sem_count,
+	    .pSignalSemaphores = signal_sems_ptr,
 	};
 
 	// Everything prepared, now we are submitting.
@@ -812,6 +757,59 @@ renderer_present_swapchain_image(struct comp_renderer *r, uint64_t desired_prese
 }
 
 static void
+renderer_wait_for_present(struct comp_renderer *r, uint64_t desired_present_time_ns)
+{
+	struct comp_compositor *c = r->c;
+
+	if (!comp_target_check_ready(c->target)) {
+		return;
+	}
+
+	// For estimating frame misses.
+	uint64_t before_ns = os_monotonic_get_ns();
+
+	if (c->target->wait_for_present_supported) {
+		// reasonable timeout
+		time_duration_ns timeout_ns = c->frame_interval_ns * 2.5f;
+
+		// @note we don't actually care about the return value, just swallow errors, anything *critical* that
+		// may be returned will be handled quite soon by later calls
+		VkResult result = comp_target_wait_for_present(c->target, timeout_ns);
+		(void)result;
+
+		assert(result != VK_ERROR_EXTENSION_NOT_PRESENT);
+	} else {
+		/*
+		 * For direct mode this makes us wait until the last frame has been
+		 * actually shown to the user, this avoids us missing that we have
+		 * missed a frame and miss-predicting the next frame.
+		 *
+		 * Not all drivers follow this behaviour, so KHR_present_wait
+		 * should be preferred in all circumstances.
+		 *
+		 * Only do this if we are ready.
+		 */
+
+		// Do the acquire
+		renderer_acquire_swapchain_image(r);
+	}
+
+	// How long did it take?
+	uint64_t after_ns = os_monotonic_get_ns();
+
+	/*
+	 * Make sure we at least waited 1ms before warning. Then check
+	 * if we are more then 1ms behind when we wanted to present.
+	 */
+	if (before_ns + U_TIME_1MS_IN_NS < after_ns && //
+	    desired_present_time_ns + U_TIME_1MS_IN_NS < after_ns) {
+		uint64_t diff_ns = after_ns - desired_present_time_ns;
+		double diff_ms_f = time_ns_to_ms_f(diff_ns);
+		COMP_WARN(c, "Compositor probably missed frame by %.2fms", diff_ms_f);
+	}
+}
+
+static void
 renderer_fini(struct comp_renderer *r)
 {
 	struct vk_bundle *vk = &r->c->base.vk;
@@ -823,14 +821,7 @@ renderer_fini(struct comp_renderer *r)
 	comp_mirror_fini(&r->mirror_to_debug_gui, vk);
 
 	// Do this after the layer renderer.
-	for (uint32_t i = 0; i < r->c->nr.view_count; i++) {
-		for (uint32_t k = 0; k < COMP_SCRATCH_NUM_IMAGES; k++) {
-			render_gfx_target_resources_fini(&r->scratch.views[i].targets[k]);
-		}
-	}
-
-	// Do this after the layer renderer and targert resources.
-	render_gfx_render_pass_fini(&r->scratch_render_pass);
+	chl_scratch_free_resources(&r->c->scratch, &r->c->nr);
 }
 
 
@@ -846,7 +837,7 @@ renderer_fini(struct comp_renderer *r)
 static XRT_CHECK_RESULT VkResult
 dispatch_graphics(struct comp_renderer *r,
                   struct render_gfx *render,
-                  struct comp_render_scratch_state *crss,
+                  struct chl_frame_state *frame_state,
                   enum comp_target_fov_source fov_source)
 {
 	COMP_TRACE_MARKER();
@@ -858,14 +849,9 @@ dispatch_graphics(struct comp_renderer *r,
 	// Basics
 	const struct comp_layer *layers = c->base.layer_accum.layers;
 	uint32_t layer_count = c->base.layer_accum.layer_count;
-	bool fast_path = c->base.frame_params.one_projection_layer_fast_path;
-	bool do_timewarp = !c->debug.atw_off;
 
 	// Resources for the distortion render target.
 	struct render_gfx_target_resources *rtr = &r->rtr_array[r->acquired_buffer];
-
-	// Consistency check.
-	assert(!fast_path || c->base.layer_accum.layer_count >= 1);
 
 	// Viewport information.
 	struct render_viewport_data viewport_datas[XRT_MAX_VIEWS];
@@ -887,70 +873,18 @@ dispatch_graphics(struct comp_renderer *r,
 	    eye_poses,              //
 	    render->r->view_count); //
 
-
-	// The arguments for the dispatch function.
-	struct comp_render_dispatch_data data;
-	comp_render_gfx_initial_init( //
-	    &data,                    // data
-	    rtr,                      // rtr
-	    fast_path,                // fast_path
-	    do_timewarp);             // do_timewarp
-	for (uint32_t i = 0; i < render->r->view_count; i++) {
-		// Which image of the scratch images for this view are we using.
-		uint32_t scratch_index = crss->views[i].index;
-
-		// The set of scratch images we are using for this view.
-		struct comp_scratch_single_images *scratch_view = &c->scratch.views[i];
-
-		// The render target resources for the scratch images.
-		struct render_gfx_target_resources *rsci_rtr = &r->scratch.views[i].targets[scratch_index];
-
-		// Scratch color image.
-		struct render_scratch_color_image *rsci = &scratch_view->images[scratch_index];
-
-		// Use the whole scratch image.
-		struct render_viewport_data layer_viewport_data = {
-		    .x = 0,
-		    .y = 0,
-		    .w = scratch_view->info.width,
-		    .h = scratch_view->info.height,
-		};
-
-		// Scratch image covers the whole image.
-		struct xrt_normalized_rect layer_norm_rect = {.x = 0.0f, .y = 0.0f, .w = 1.0f, .h = 1.0f};
-
-		comp_render_gfx_add_view( //
-		    &data,                //
-		    &world_poses[i],      //
-		    &eye_poses[i],        //
-		    &fovs[i],             //
-		    rsci_rtr,             //
-		    &layer_viewport_data, //
-		    &layer_norm_rect,     //
-		    rsci->image,          //
-		    rsci->srgb_view,      //
-		    &vertex_rots[i],      //
-		    &viewport_datas[i]);  // target_viewport_data
-
-		if (layer_count == 0) {
-			crss->views[i].used = false;
-		} else {
-			crss->views[i].used = !fast_path;
-		}
-	}
-
-	// Start the graphics pipeline.
-	render_gfx_begin(render);
-
-	// Build the command buffer.
-	comp_render_gfx_dispatch( //
-	    render,               //
-	    layers,               //
-	    layer_count,          //
-	    &data);               //
-
-	// Make the command buffer submittable.
-	render_gfx_end(render);
+	// Does everything.
+	chl_frame_state_gfx_default_pipeline( //
+	    frame_state,                      //
+	    render,                           //
+	    layers,                           //
+	    layer_count,                      //
+	    world_poses,                      //
+	    eye_poses,                        //
+	    fovs,                             //
+	    rtr,                              //
+	    viewport_datas,                   //
+	    vertex_rots);                     //
 
 	// Everything is ready, submit to the queue.
 	ret = renderer_submit_queue(r, render->r->cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -972,7 +906,7 @@ dispatch_graphics(struct comp_renderer *r,
 static XRT_CHECK_RESULT VkResult
 dispatch_compute(struct comp_renderer *r,
                  struct render_compute *render,
-                 struct comp_render_scratch_state *crss,
+                 struct chl_frame_state *frame_state,
                  enum comp_target_fov_source fov_source)
 {
 	COMP_TRACE_MARKER();
@@ -984,8 +918,6 @@ dispatch_compute(struct comp_renderer *r,
 	// Basics
 	const struct comp_layer *layers = c->base.layer_accum.layers;
 	uint32_t layer_count = c->base.layer_accum.layer_count;
-	bool fast_path = c->base.frame_params.one_projection_layer_fast_path;
-	bool do_timewarp = !c->debug.atw_off;
 
 	// Device view information.
 	struct xrt_fov fovs[XRT_MAX_VIEWS];
@@ -1001,73 +933,24 @@ dispatch_compute(struct comp_renderer *r,
 
 	// Target Vulkan resources..
 	VkImage target_image = r->c->target->images[r->acquired_buffer].handle;
-	VkImageView target_image_view = r->c->target->images[r->acquired_buffer].view;
+	VkImageView target_storage_view = r->c->target->images[r->acquired_buffer].view;
 
 	// Target view information.
-	struct render_viewport_data views[XRT_MAX_VIEWS];
-	calc_viewport_data(r, views, render->r->view_count);
+	struct render_viewport_data target_viewport_datas[XRT_MAX_VIEWS];
+	calc_viewport_data(r, target_viewport_datas, render->r->view_count);
 
-	// The arguments for the dispatch function.
-	struct comp_render_dispatch_data data;
-	comp_render_cs_initial_init( //
-	    &data,                   // data
-	    target_image,            // target_image
-	    target_image_view,       // target_unorm_view
-	    fast_path,               // fast_path
-	    do_timewarp);            // do_timewarp
-
-	for (uint32_t i = 0; i < render->r->view_count; i++) {
-		// Which image of the scratch images for this view are we using.
-		uint32_t scratch_index = crss->views[i].index;
-
-		// The set of scratch images we are using for this view.
-		struct comp_scratch_single_images *scratch_view = &c->scratch.views[i];
-
-		// Scratch color image.
-		struct render_scratch_color_image *rsci = &scratch_view->images[scratch_index];
-
-		// Use the whole scratch image.
-		struct render_viewport_data layer_viewport_data = {
-		    .x = 0,
-		    .y = 0,
-		    .w = scratch_view->info.width,
-		    .h = scratch_view->info.height,
-		};
-
-		// Scratch image covers the whole image.
-		struct xrt_normalized_rect layer_norm_rect = {.x = 0.0f, .y = 0.0f, .w = 1.0f, .h = 1.0f};
-
-		comp_render_cs_add_view(  //
-		    &data,                //
-		    &world_poses[i],      //
-		    &eye_poses[i],        //
-		    &fovs[i],             //
-		    &layer_viewport_data, //
-		    &layer_norm_rect,     //
-		    rsci->image,          //
-		    rsci->srgb_view,      //
-		    rsci->unorm_view,     //
-		    &views[i]);           // target_viewport_data
-
-		if (layer_count == 0) {
-			crss->views[i].used = false;
-		} else {
-			crss->views[i].used = !fast_path;
-		}
-	}
-
-	// Start the compute pipeline.
-	render_compute_begin(render);
-
-	// Build the command buffer.
-	comp_render_cs_dispatch( //
-	    render,              //
-	    layers,              //
-	    layer_count,         //
-	    &data);              //
-
-	// Make the command buffer submittable.
-	render_compute_end(render);
+	// Does everything.
+	chl_frame_state_cs_default_pipeline( //
+	    frame_state,                     //
+	    render,                          //
+	    layers,                          //
+	    layer_count,                     //
+	    world_poses,                     //
+	    eye_poses,                       //
+	    fovs,                            //
+	    target_image,                    //
+	    target_storage_view,             //
+	    target_viewport_datas);          //
 
 	// Everything is ready, submit to the queue.
 	ret = renderer_submit_queue(r, render->r->cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -1128,9 +1011,21 @@ comp_renderer_draw(struct comp_renderer *r)
 	const uint32_t view_count = c->nr.view_count;
 	enum comp_target_fov_source fov_source = COMP_TARGET_FOV_SOURCE_DISTORTION;
 
+	bool fast_path = c->base.frame_params.one_projection_layer_fast_path;
+	bool do_timewarp = !c->debug.atw_off;
+
+	// Consistency check.
+	assert(!fast_path || c->base.layer_accum.layer_count >= 1);
+
 	// For scratch image debugging.
-	struct comp_render_scratch_state crss;
-	scratch_get_init(&crss, r, view_count);
+	struct chl_frame_state frame_state;
+	chl_frame_state_init( //
+	    &frame_state,     //
+	    &c->nr,           //
+	    view_count,       //
+	    do_timewarp,      //
+	    fast_path,        //
+	    &c->scratch);     //
 
 	bool use_compute = r->settings->use_compute;
 	struct render_gfx render_g = {0};
@@ -1139,10 +1034,10 @@ comp_renderer_draw(struct comp_renderer *r)
 	VkResult res = VK_SUCCESS;
 	if (use_compute) {
 		render_compute_init(&render_c, &c->nr);
-		res = dispatch_compute(r, &render_c, &crss, fov_source);
+		res = dispatch_compute(r, &render_c, &frame_state, fov_source);
 	} else {
 		render_gfx_init(&render_g, &c->nr);
-		res = dispatch_graphics(r, &render_g, &crss, fov_source);
+		res = dispatch_graphics(r, &render_g, &frame_state, fov_source);
 	}
 	if (res != VK_SUCCESS) {
 		return XRT_ERROR_VULKAN;
@@ -1152,20 +1047,24 @@ comp_renderer_draw(struct comp_renderer *r)
 	if (c->peek) {
 		switch (comp_window_peek_get_eye(c->peek)) {
 		case COMP_WINDOW_PEEK_EYE_LEFT: {
-			struct comp_scratch_single_images *view = &c->scratch.views[0];
-			comp_window_peek_blit(                       //
-			    c->peek,                                 //
-			    view->images[crss.views[0].index].image, //
-			    view->info.width,                        //
-			    view->info.height);                      //
+			uint32_t scratch_index = frame_state.scratch_state.views[0].index;
+			struct comp_scratch_single_images *view = &c->scratch.views[0].cssi;
+
+			comp_window_peek_blit(                 //
+			    c->peek,                           //
+			    view->images[scratch_index].image, //
+			    view->info.width,                  //
+			    view->info.height);                //
 		} break;
 		case COMP_WINDOW_PEEK_EYE_RIGHT: {
-			struct comp_scratch_single_images *view = &c->scratch.views[1];
-			comp_window_peek_blit(                       //
-			    c->peek,                                 //
-			    view->images[crss.views[1].index].image, //
-			    view->info.width,                        //
-			    view->info.height);                      //
+			uint32_t scratch_index = frame_state.scratch_state.views[1].index;
+			struct comp_scratch_single_images *view = &c->scratch.views[1].cssi;
+
+			comp_window_peek_blit(                 //
+			    c->peek,                           //
+			    view->images[scratch_index].image, //
+			    view->info.width,                  //
+			    view->info.height);                //
 		} break;
 		case COMP_WINDOW_PEEK_EYE_BOTH:
 			/* TODO: display the undistorted image */
@@ -1191,8 +1090,9 @@ comp_renderer_draw(struct comp_renderer *r)
 	comp_mirror_fixup_ui_state(&r->mirror_to_debug_gui, c);
 	if (comp_mirror_is_ready_and_active(&r->mirror_to_debug_gui, c, predicted_display_time_ns)) {
 
-		struct comp_scratch_single_images *view = &c->scratch.views[0];
-		struct render_scratch_color_image *rsci = &view->images[crss.views[0].index];
+		uint32_t scratch_index = frame_state.scratch_state.views[0].index;
+		struct comp_scratch_single_images *view = &c->scratch.views[0].cssi;
+		struct render_scratch_color_image *rsci = &view->images[scratch_index];
 		VkExtent2D extent = {view->info.width, view->info.width};
 
 		// Used for both, want clamp to edge to no bring in black.
@@ -1222,8 +1122,11 @@ comp_renderer_draw(struct comp_renderer *r)
 	 */
 	renderer_wait_queue_idle(r);
 
-	// Finalize the scratch images, send to debug UI if active.
-	scratch_get_fini(&crss, r, view_count);
+	/*
+	 * Free any resources and finalize the scratch images,
+	 * which sends them send to debug UI if it is active.
+	 */
+	chl_frame_state_fini(&frame_state);
 
 	// Check timestamps.
 	if (xret == XRT_SUCCESS) {
@@ -1249,35 +1152,7 @@ comp_renderer_draw(struct comp_renderer *r)
 		render_gfx_fini(&render_g);
 	}
 
-
-	/*
-	 * For direct mode this makes us wait until the last frame has been
-	 * actually shown to the user, this avoids us missing that we have
-	 * missed a frame and miss-predicting the next frame.
-	 *
-	 * Only do this if we are ready.
-	 */
-	if (comp_target_check_ready(r->c->target)) {
-		// For estimating frame misses.
-		uint64_t then_ns = os_monotonic_get_ns();
-
-		// Do the acquire
-		renderer_acquire_swapchain_image(r);
-
-		// How long did it take?
-		uint64_t now_ns = os_monotonic_get_ns();
-
-		/*
-		 * Make sure we at least waited 1ms before warning. Then check
-		 * if we are more then 1ms behind when we wanted to present.
-		 */
-		if (then_ns + U_TIME_1MS_IN_NS < now_ns && //
-		    desired_present_time_ns + U_TIME_1MS_IN_NS < now_ns) {
-			uint64_t diff_ns = now_ns - desired_present_time_ns;
-			double diff_ms_f = time_ns_to_ms_f(diff_ns);
-			COMP_WARN(c, "Compositor probably missed frame by %.2fms", diff_ms_f);
-		}
-	}
+	renderer_wait_for_present(r, desired_present_time_ns);
 
 	comp_target_update_timings(ct);
 

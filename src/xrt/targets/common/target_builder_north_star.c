@@ -308,7 +308,7 @@ ns_setup_depthai_device(struct ns_builder *nsb,
 
 #ifdef XRT_BUILD_DRIVER_HANDTRACKING
 	struct xrt_slam_sinks *hand_sinks = NULL;
-	struct xrt_hand_masks_sink *masks_sink = slam_sinks ? slam_sinks->hand_masks : NULL;
+	struct xrt_device_masks_sink *masks_sink = slam_sinks ? slam_sinks->hand_masks : NULL;
 
 	struct t_camera_extra_info extra_camera_info = {0};
 
@@ -588,8 +588,8 @@ ns_open_system_impl(struct xrt_builder *xb,
 	ubrh->head = head_wrap;
 	ubrh->left = left;
 	ubrh->right = right;
-	ubrh->hand_tracking.left = left_ht;
-	ubrh->hand_tracking.right = right_ht;
+	ubrh->hand_tracking.unobstructed.left = left_ht;
+	ubrh->hand_tracking.unobstructed.right = right_ht;
 
 end:
 	if (nsb->config_json != NULL) {

@@ -146,6 +146,10 @@ if(XRT_HAVE_VULKAN)
 		comp_util STATIC
 		util/comp_base.h
 		util/comp_base.c
+		util/comp_high_level_render.c
+		util/comp_high_level_render.h
+		util/comp_high_level_scratch.c
+		util/comp_high_level_scratch.h
 		util/comp_layer_accum.h
 		util/comp_layer_accum.c
 		util/comp_render.h
@@ -182,6 +186,7 @@ if(XRT_MODULE_COMPOSITOR_MAIN)
 		main/comp_compositor.c
 		main/comp_compositor.h
 		main/comp_documentation.h
+		main/comp_main_interface.h
 		main/comp_renderer.c
 		main/comp_renderer.h
 		main/comp_settings.c
@@ -190,6 +195,7 @@ if(XRT_MODULE_COMPOSITOR_MAIN)
 		main/comp_target_swapchain.c
 		main/comp_target_swapchain.h
 		main/comp_window.h
+		main/comp_window_debug_image.c
 		main/comp_mirror_to_debug_gui.c
 		main/comp_mirror_to_debug_gui.h
 		)

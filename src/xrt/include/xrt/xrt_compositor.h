@@ -20,8 +20,6 @@
 #include "xrt/xrt_config_have.h"
 #include "xrt/xrt_windows.h"
 
-#include <stdalign.h>
-
 #if defined(XRT_HAVE_D3D11)
 #include <d3d11.h>
 #elif defined(XRT_DOXYGEN)
@@ -412,7 +410,7 @@ struct xrt_layer_data
 	 *
 	 * alignas for 32 bit client support,
 	 */
-	alignas(8) int64_t timestamp;
+	XRT_ALIGNAS(8) int64_t timestamp;
 
 	/*!
 	 * Composition flags
@@ -481,7 +479,7 @@ struct xrt_layer_data
 struct xrt_layer_frame_data
 {
 	//! alignas for 32 bit client support, see @ref ipc-design
-	alignas(8) int64_t frame_id;
+	XRT_ALIGNAS(8) int64_t frame_id;
 	int64_t display_time_ns;
 	enum xrt_blend_mode env_blend_mode;
 };
@@ -935,7 +933,7 @@ struct xrt_session_info
 {
 	bool is_overlay;
 	//! alignas for 32 bit client support, see @ref ipc-design
-	alignas(8) uint64_t flags;
+	XRT_ALIGNAS(8) uint64_t flags;
 	uint32_t z_order;
 };
 
@@ -953,7 +951,7 @@ struct xrt_compositor_info
 	 * Supported formats, never changes.
 	 * alignas for 32 bit client support, see @ref ipc-design
 	 */
-	alignas(8) int64_t formats[XRT_MAX_SWAPCHAIN_FORMATS];
+	XRT_ALIGNAS(8) int64_t formats[XRT_MAX_SWAPCHAIN_FORMATS];
 
 	//! Max texture size that GPU supports (size of a single dimension), zero means any size.
 	uint32_t max_texture_size;
@@ -967,11 +965,13 @@ struct xrt_begin_session_info
 {
 	enum xrt_view_type view_type;
 	bool ext_hand_tracking_enabled;
+	bool ext_hand_tracking_data_source_enabled;
 	bool ext_eye_gaze_interaction_enabled;
 	bool ext_hand_interaction_enabled;
 	bool htc_facial_tracking_enabled;
 	bool fb_body_tracking_enabled;
 	bool fb_face_tracking2_enabled;
+	bool meta_body_tracking_full_body_enabled;
 };
 
 /*!

@@ -292,6 +292,28 @@ from_YUV888_to_R8G8B8(struct xrt_frame *dst_frame, uint32_t w, uint32_t h, size_
  */
 
 #ifdef XRT_HAVE_JPEG
+
+#include <setjmp.h>
+
+struct jpeg_decoder_err
+{
+	struct jpeg_error_mgr base;
+
+	char error_msg[JMSG_LENGTH_MAX];
+	jmp_buf setjmp_buffer;
+};
+
+METHODDEF(void) handle_jpeg_error(j_common_ptr cinfo)
+{
+	struct jpeg_decoder_err *err_mgr = (struct jpeg_decoder_err *)cinfo->err;
+
+	(*(cinfo->err->format_message))(cinfo, err_mgr->error_msg);
+	U_LOG_E("JPEG decode error: %s", err_mgr->error_msg);
+
+	// Jump to the setjmp point if we get an error
+	longjmp(err_mgr->setjmp_buffer, 1);
+}
+
 static bool
 check_header(size_t size, const uint8_t *data)
 {
@@ -309,7 +331,7 @@ check_header(size_t size, const uint8_t *data)
 }
 
 static bool
-from_MJPEG_to_R8G8B8(struct xrt_frame *dst_frame, size_t size, const uint8_t *data)
+from_MJPEG_to_frame(struct xrt_frame *dst_frame, size_t size, const uint8_t *data)
 {
 	SINK_TRACE_MARKER();
 
@@ -318,12 +340,19 @@ from_MJPEG_to_R8G8B8(struct xrt_frame *dst_frame, size_t size, const uint8_t *da
 	}
 
 	struct jpeg_decompress_struct cinfo = {0};
-	struct jpeg_error_mgr jerr = {0};
+	struct jpeg_decoder_err jerr = {0};
 
-	cinfo.err = jpeg_std_error(&jerr);
-	jerr.trace_level = 0;
+	cinfo.err = jpeg_std_error(&jerr.base);
+	jerr.base.trace_level = 0;
+	jerr.base.error_exit = handle_jpeg_error;
 
 	jpeg_create_decompress(&cinfo);
+
+	// If an error occurs, it will longjmp back here, indicating failure
+	if (setjmp(jerr.setjmp_buffer)) {
+		goto fail;
+	}
+
 	jpeg_mem_src(&cinfo, data, size);
 
 	int ret = jpeg_read_header(&cinfo, TRUE);
@@ -332,7 +361,18 @@ from_MJPEG_to_R8G8B8(struct xrt_frame *dst_frame, size_t size, const uint8_t *da
 		return false;
 	}
 
-	cinfo.out_color_space = JCS_RGB;
+	switch (dst_frame->format) {
+	case XRT_FORMAT_L8: cinfo.out_color_space = JCS_GRAYSCALE; break;
+	case XRT_FORMAT_R8G8B8: cinfo.out_color_space = JCS_RGB; break;
+	case XRT_FORMAT_YUV888: cinfo.out_color_space = JCS_YCbCr; break;
+	default: {
+		assert(!"unsupported format");
+
+		jpeg_destroy_decompress(&cinfo);
+		return false;
+	}
+	}
+
 	jpeg_start_decompress(&cinfo);
 
 	uint8_t *moving_ptr = dst_frame->data;
@@ -348,48 +388,9 @@ from_MJPEG_to_R8G8B8(struct xrt_frame *dst_frame, size_t size, const uint8_t *da
 	jpeg_destroy_decompress(&cinfo);
 
 	return true;
-}
-
-static bool
-from_MJPEG_to_YUV888(struct xrt_frame *dst_frame, size_t size, const uint8_t *data)
-{
-	SINK_TRACE_MARKER();
-
-	if (!check_header(size, data)) {
-		return false;
-	}
-
-	struct jpeg_decompress_struct cinfo = {0};
-	struct jpeg_error_mgr jerr = {0};
-
-	cinfo.err = jpeg_std_error(&jerr);
-	jerr.trace_level = 0;
-
-	jpeg_create_decompress(&cinfo);
-	jpeg_mem_src(&cinfo, data, size);
-
-	int ret = jpeg_read_header(&cinfo, TRUE);
-	if (ret != JPEG_HEADER_OK) {
-		jpeg_destroy_decompress(&cinfo);
-		return false;
-	}
-
-	cinfo.out_color_space = JCS_YCbCr;
-	jpeg_start_decompress(&cinfo);
-
-	uint8_t *moving_ptr = dst_frame->data;
-
-	uint32_t scanlines_read = 0;
-	while (scanlines_read < cinfo.image_height) {
-		int read_count = jpeg_read_scanlines(&cinfo, &moving_ptr, 16);
-		moving_ptr += read_count * dst_frame->stride;
-		scanlines_read += read_count;
-	}
-
-	jpeg_finish_decompress(&cinfo);
-	jpeg_destroy_decompress(&cinfo);
-
-	return true;
+fail:
+	jpeg_abort_decompress(&cinfo);
+	return false;
 }
 #endif
 
@@ -524,6 +525,19 @@ convert_frame_l8(struct xrt_frame_sink *xs, struct xrt_frame *xf)
 		}
 		from_YUYV422_to_L8(converted, xf->width, xf->height, xf->stride, xf->data);
 		break;
+#ifdef XRT_HAVE_JPEG
+	case XRT_FORMAT_MJPEG:
+		if (!create_frame_with_format(xf, XRT_FORMAT_L8, &converted)) {
+			return;
+		}
+
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
+			// Make sure to free frame when we fail to decode.
+			xrt_frame_reference(&converted, NULL);
+			return;
+		}
+		break;
+#endif
 	default: U_LOG_E("Cannot convert from '%s' to L8!", u_format_str(xf->format)); return;
 	}
 
@@ -582,7 +596,7 @@ convert_frame_r8g8b8_or_l8(struct xrt_frame_sink *xs, struct xrt_frame *xf)
 		if (!create_frame_with_format(xf, XRT_FORMAT_R8G8B8, &converted)) {
 			return;
 		}
-		if (!from_MJPEG_to_R8G8B8(converted, xf->size, xf->data)) {
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
 			// Make sure to free frame when we fail to decode.
 			xrt_frame_reference(&converted, NULL);
 			return;
@@ -650,7 +664,7 @@ convert_frame_r8g8b8_bayer_or_l8(struct xrt_frame_sink *xs, struct xrt_frame *xf
 		if (!create_frame_with_format(xf, XRT_FORMAT_R8G8B8, &converted)) {
 			return;
 		}
-		if (!from_MJPEG_to_R8G8B8(converted, xf->size, xf->data)) {
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
 			// Make sure to free frame when we fail to decode.
 			xrt_frame_reference(&converted, NULL);
 			return;
@@ -714,7 +728,7 @@ convert_frame_r8g8b8(struct xrt_frame_sink *xs, struct xrt_frame *xf)
 		if (!create_frame_with_format(xf, XRT_FORMAT_R8G8B8, &converted)) {
 			return;
 		}
-		if (!from_MJPEG_to_R8G8B8(converted, xf->size, xf->data)) {
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
 			// Make sure to free frame when we fail to decode.
 			xrt_frame_reference(&converted, NULL);
 			return;
@@ -750,7 +764,7 @@ convert_frame_rgb_yuv_yuyv_uyvy_or_l8(struct xrt_frame_sink *xs, struct xrt_fram
 		if (!create_frame_with_format(xf, XRT_FORMAT_YUV888, &converted)) {
 			return;
 		}
-		if (!from_MJPEG_to_YUV888(converted, xf->size, xf->data)) {
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
 			return;
 		}
 		break;
@@ -785,7 +799,7 @@ convert_frame_yuv_yuyv_uyvy_or_l8(struct xrt_frame_sink *xs, struct xrt_frame *x
 		if (!create_frame_with_format(xf, XRT_FORMAT_YUV888, &converted)) {
 			return;
 		}
-		if (!from_MJPEG_to_YUV888(converted, xf->size, xf->data)) {
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
 			return;
 		}
 		break;
@@ -821,7 +835,7 @@ convert_frame_yuv_or_yuyv(struct xrt_frame_sink *xs, struct xrt_frame *xf)
 		if (!create_frame_with_format(xf, XRT_FORMAT_YUV888, &converted)) {
 			return;
 		}
-		if (!from_MJPEG_to_YUV888(converted, xf->size, xf->data)) {
+		if (!from_MJPEG_to_frame(converted, xf->size, xf->data)) {
 			return;
 		}
 		break;

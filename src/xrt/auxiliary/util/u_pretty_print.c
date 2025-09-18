@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 
 /*
@@ -133,6 +134,55 @@ u_pp_xrt_input_name(struct u_pp_delegate dg, enum xrt_input_name name)
 }
 
 void
+u_pp_xrt_output_name(struct u_pp_delegate dg, enum xrt_output_name name)
+{
+#define XRT_OUTPUT_CASE(NAME)                                                                                          \
+	case NAME: DG(#NAME); return
+
+	switch (name) {
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_SIMPLE_VIBRATION);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_PSMV_RUMBLE_VIBRATION);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_INDEX_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_VIVE_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_WMR_HAPTIC);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_XBOX_HAPTIC_LEFT);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_XBOX_HAPTIC_RIGHT);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_XBOX_HAPTIC_LEFT_TRIGGER);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_XBOX_HAPTIC_RIGHT_TRIGGER);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_TOUCH_HAPTIC);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_FORCE_FEEDBACK_LEFT);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_FORCE_FEEDBACK_RIGHT);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_G2_CONTROLLER_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_ODYSSEY_CONTROLLER_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_ML2_CONTROLLER_VIBRATION);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_PSSENSE_VIBRATION);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_PSSENSE_TRIGGER_FEEDBACK);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_VIVE_TRACKER_HAPTIC);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_OPPO_MR_HAPTIC);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_PICO_NEO3_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_PICO4_HAPTIC);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_VIVE_COSMOS_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_VIVE_FOCUS3_HAPTIC);
+
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_TOUCH_PRO_HAPTIC);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_TOUCH_PRO_HAPTIC_TRIGGER);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_TOUCH_PRO_HAPTIC_THUMB);
+		XRT_OUTPUT_CASE(XRT_OUTPUT_NAME_TOUCH_PLUS_HAPTIC);
+	}
+
+#undef XRT_OUTPUT_CASE
+}
+
+void
 u_pp_xrt_result(struct u_pp_delegate dg, xrt_result_t xret)
 {
 	// clang-format off
@@ -173,6 +223,8 @@ u_pp_xrt_result(struct u_pp_delegate dg, xrt_result_t xret)
 	case XRT_ERROR_ANDROID:                              DG("XRT_ERROR_ANDROID"); return;
 	case XRT_ERROR_FEATURE_NOT_SUPPORTED:                DG("XRT_ERROR_FEATURE_NOT_SUPPORTED"); return;
 	case XRT_ERROR_INPUT_UNSUPPORTED:                    DG("XRT_ERROR_INPUT_UNSUPPORTED"); return;
+	case XRT_ERROR_OUTPUT_UNSUPPORTED:                   DG("XRT_ERROR_OUTPUT_UNSUPPORTED"); return;
+	case XRT_ERROR_OUTPUT_REQUEST_FAILURE:               DG("XRT_ERROR_OUTPUT_REQUEST_FAILURE"); return;
 	}
 	// clang-format on
 
@@ -211,6 +263,49 @@ u_pp_xrt_reference_space_type(struct u_pp_delegate dg, enum xrt_reference_space_
 	case XRT_SPACE_REFERENCE_TYPE_INVALID: DG("XRT_SPACE_REFERENCE_TYPE_INVALID"); return;
 	default: u_pp(dg, "XRT_SPACE_REFERENCE_TYPE_0x%08x", type); return;
 	}
+}
+
+void
+u_pp_padded_pretty_ms(u_pp_delegate_t dg, uint64_t value_ns)
+{
+	uint64_t in_us = value_ns / 1000;
+	uint64_t in_ms = in_us / 1000;
+	uint64_t in_1_000_ms = in_ms / 1000;
+	uint64_t in_1_000_000_ms = in_1_000_ms / 1000;
+
+	// Prints " M'TTT'###.FFFms"
+
+	// " M'"
+	if (in_1_000_000_ms >= 1) {
+		u_pp(dg, " %" PRIu64 "'", in_1_000_000_ms);
+	} else {
+		//       " M'"
+		u_pp(dg, "   ");
+	}
+
+	// "TTT'"
+	if (in_1_000_ms >= 1000) {
+		// Need to pad with zeros
+		u_pp(dg, "%03" PRIu64 "'", in_1_000_ms % 1000);
+	} else if (in_1_000_ms >= 1) {
+		// Pad with spaces, we need to write a number.
+		u_pp(dg, "%3" PRIu64 "'", in_1_000_ms);
+	} else {
+		//       "TTT'"
+		u_pp(dg, "    ");
+	}
+
+	// "###"
+	if (in_ms >= 1000) {
+		// Need to pad with zeros
+		u_pp(dg, "%03" PRIu64, in_ms % 1000);
+	} else {
+		// Pad with spaces, always need a numbere here.
+		u_pp(dg, "%3" PRIu64, in_ms % 1000);
+	}
+
+	// ".FFFms"
+	u_pp(dg, ".%03" PRIu64 "ms", in_us % 1000);
 }
 
 

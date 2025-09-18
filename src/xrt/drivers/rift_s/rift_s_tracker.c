@@ -238,7 +238,7 @@ rift_s_create_slam_tracker(struct rift_s_tracker *t, struct xrt_frame_context *x
 static int
 rift_s_create_hand_tracker(struct rift_s_tracker *t,
                            struct xrt_frame_context *xfctx,
-                           struct xrt_hand_masks_sink *masks_sink,
+                           struct xrt_device_masks_sink *masks_sink,
                            struct xrt_slam_sinks **out_sinks,
                            struct xrt_device **out_device)
 {
@@ -332,8 +332,7 @@ rift_s_fill_constellation_calibration(struct rift_s_tracker *t, struct rift_s_hm
 		    .extent = {.w = 640, .h = 480},
 		};
 		out->cams[i] = (struct t_constellation_camera){
-		    .P_base_cam = P_imu_camcv,
-		    .origin_space = CONSTELLATION_CAMERA_ORIGIN_HMD_IMU,
+		    .P_imu_cam = P_imu_camcv,
 		    .roi = roi,
 		    .calibration = rift_s_get_cam_calib(&hmd_config->camera_calibration, cam_id),
 		    .blob_min_threshold = BLOB_PIXEL_THRESHOLD,
@@ -351,7 +350,7 @@ rift_s_create_constellation_tracker(struct rift_s_tracker *t, struct xrt_frame_c
 	struct xrt_frame_sink *controller_sink = NULL;
 
 	if (t_constellation_tracker_create(xfctx, &t->base, &t->constellation_calib, &t->controller_tracker,
-	                                   &controller_sink) != 0) {
+	                                   &controller_sink, NULL /* @todo */) != 0) {
 		RIFT_S_WARN("Failed to create Controller Tracker. Controllers will not be 6dof");
 		return -1;
 	}
@@ -369,12 +368,6 @@ rift_s_tracker_add_debug_ui(struct rift_s_tracker *t, void *root)
 		t->gui.switch_tracker_btn.ptr = t;
 		u_var_add_button(root, &t->gui.switch_tracker_btn, "Switch to 3DoF Tracking");
 	}
-
-	u_var_add_ro_i64(root, &t->fusion.last_imu_timestamp_ns, "HMD device TS (ns)");
-	u_var_add_ro_i64(root, &t->fusion.last_imu_local_timestamp_ns, "Last IMU sample local TS (ns)");
-	u_var_add_ro_i64(root, &t->hw2mono, "Device->local TS offset (ns)");
-	u_var_add_ro_i64(root, &t->last_hw2mono_delta_us, "Last Device->local TS offset change (µs)");
-	u_var_add_ro_i64(root, &t->last_frame_time, "Last camera frame local TS (ns)");
 
 	u_var_add_pose(root, &t->pose, "Tracked Pose");
 
@@ -483,7 +476,7 @@ rift_s_tracker_create(struct xrt_tracking_origin *origin,
 	// Initialize hand tracker
 	struct xrt_slam_sinks *hand_sinks = NULL;
 	struct xrt_device *hand_device = NULL;
-	struct xrt_hand_masks_sink *masks_sink = slam_sinks ? slam_sinks->hand_masks : NULL;
+	struct xrt_device_masks_sink *masks_sink = slam_sinks ? slam_sinks->hand_masks : NULL;
 	if (t->tracking.hand_enabled) {
 		int hand_status = rift_s_create_hand_tracker(t, xfctx, masks_sink, &hand_sinks, &hand_device);
 		if (hand_status != 0 || hand_sinks == NULL || hand_device == NULL) {
@@ -555,10 +548,9 @@ rift_s_tracker_clock_update(struct rift_s_tracker *t, uint64_t device_timestamp_
 {
 	os_mutex_lock(&t->mutex);
 	time_duration_ns last_hw2mono = t->hw2mono;
-	const float freq = 1000.0;
+	const float freq = 250.0;
 
 	m_clock_offset_a2b(freq, device_timestamp_ns, local_timestamp_ns, &t->hw2mono);
-	t->last_hw2mono_delta_us = (t->hw2mono - last_hw2mono) / 1000;
 
 	if (!t->have_hw2mono) {
 		/* At startup, Rift S can send old data that throws off
@@ -798,7 +790,6 @@ rift_s_tracker_get_tracked_pose(struct rift_s_tracker *t,
 		    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT |
 		    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT);
 
-		t->pose = imu_relation.pose;
 		m_relation_chain_push_relation(&xrc, &imu_relation);
 	} else {
 		struct xrt_space_relation imu_relation = XRT_SPACE_RELATION_ZERO;

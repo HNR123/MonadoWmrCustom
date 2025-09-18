@@ -1,4 +1,5 @@
 // Copyright 2018-2024, Collabora, Ltd.
+// Copyright 2024-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -156,6 +157,39 @@ xr_ref_space_to_xrt(XrReferenceSpaceType space_type)
 	return XRT_SPACE_REFERENCE_TYPE_INVALID;
 }
 
+
+/*
+ *
+ * Form factor things.
+ *
+ */
+
+static inline enum xrt_form_factor
+xr_form_factor_to_xrt(XrFormFactor form_factor)
+{
+	switch (form_factor) {
+	case XR_FORM_FACTOR_HANDHELD_DISPLAY: return XRT_FORM_FACTOR_HANDHELD;
+	case XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY: return XRT_FORM_FACTOR_HMD;
+	case XR_FORM_FACTOR_MAX_ENUM: assert(false); return 0; // As good as any.
+	}
+
+	// Used as default, to get warnings.
+	return XRT_FORM_FACTOR_HMD;
+}
+
+static inline enum XrFormFactor
+xrt_form_factor_to_xr(enum xrt_form_factor form_factor)
+{
+	switch (form_factor) {
+	case XRT_FORM_FACTOR_HANDHELD: return XR_FORM_FACTOR_HANDHELD_DISPLAY;
+	case XRT_FORM_FACTOR_HMD: return XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+	}
+
+	// Used as default, to get warnings.
+	return XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+}
+
+
 /*
  *
  * IO things.
@@ -229,5 +263,29 @@ xrt_perf_notify_level_to_xr(enum xrt_perf_notify_level level)
 	case XRT_PERF_NOTIFY_LEVEL_WARNING: return XR_PERF_SETTINGS_NOTIF_LEVEL_WARNING_EXT;
 	case XRT_PERF_NOTIFY_LEVEL_IMPAIRED: return XR_PERF_SETTINGS_NOTIF_LEVEL_IMPAIRED_EXT;
 	default: assert(false); return 0;
+	}
+}
+
+static inline enum xrt_input_name
+xr_hand_tracking_data_source_to_xrt(XrHandTrackingDataSourceEXT data_source, enum XrHandEXT hand)
+{
+	switch (data_source) {
+	case XR_HAND_TRACKING_DATA_SOURCE_UNOBSTRUCTED_EXT:
+		return (hand == XR_HAND_LEFT_EXT) ? XRT_INPUT_HT_UNOBSTRUCTED_LEFT : XRT_INPUT_HT_UNOBSTRUCTED_RIGHT;
+	case XR_HAND_TRACKING_DATA_SOURCE_CONTROLLER_EXT:
+		return (hand == XR_HAND_LEFT_EXT) ? XRT_INPUT_HT_CONFORMING_LEFT : XRT_INPUT_HT_CONFORMING_RIGHT;
+	default: assert(false); return (enum xrt_input_name)(-1);
+	}
+}
+
+static inline XrHandTrackingDataSourceEXT
+xrt_hand_tracking_data_source_to_xr(enum xrt_input_name ht_input_name)
+{
+	switch (ht_input_name) {
+	case XRT_INPUT_HT_UNOBSTRUCTED_LEFT:
+	case XRT_INPUT_HT_UNOBSTRUCTED_RIGHT: return XR_HAND_TRACKING_DATA_SOURCE_UNOBSTRUCTED_EXT;
+	case XRT_INPUT_HT_CONFORMING_LEFT:
+	case XRT_INPUT_HT_CONFORMING_RIGHT: return XR_HAND_TRACKING_DATA_SOURCE_CONTROLLER_EXT;
+	default: assert(false); return XR_HAND_TRACKING_DATA_SOURCE_MAX_ENUM_EXT;
 	}
 }

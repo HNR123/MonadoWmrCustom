@@ -139,7 +139,7 @@ destroy(struct xrt_device *xdev)
 	free(d);
 }
 
-static void
+static xrt_result_t
 get_hand_tracking(struct xrt_device *xdev,
                   enum xrt_input_name name,
                   int64_t at_timestamp_ns,
@@ -148,15 +148,18 @@ get_hand_tracking(struct xrt_device *xdev,
 {
 	struct multi_device *d = (struct multi_device *)xdev;
 	struct xrt_device *target = d->tracking_override.target;
-	xrt_device_get_hand_tracking(target, name, at_timestamp_ns, out_value, out_timestamp_ns);
+	xrt_result_t xret = xrt_device_get_hand_tracking(target, name, at_timestamp_ns, out_value, out_timestamp_ns);
+	U_LOG_CHK_AND_RET(d->log_level, xret, "xrt_device_get_hand_tracking");
+
 	if (!out_value->is_active) {
-		return;
+		return XRT_SUCCESS;
 	}
 
 	struct xrt_device *tracker = d->tracking_override.tracker;
 	struct xrt_space_relation tracker_relation;
-	xrt_device_get_tracked_pose(tracker, d->tracking_override.input_name, *out_timestamp_ns, &tracker_relation);
-
+	xret =
+	    xrt_device_get_tracked_pose(tracker, d->tracking_override.input_name, *out_timestamp_ns, &tracker_relation);
+	U_LOG_CHK_AND_RET(d->log_level, xret, "xrt_device_get_hand_tracking");
 
 	switch (d->override_type) {
 	case XRT_TRACKING_OVERRIDE_DIRECT: direct_override(d, &tracker_relation, &out_value->hand_pose); break;
@@ -178,17 +181,19 @@ get_hand_tracking(struct xrt_device *xdev,
 		                  &in_target_space, &out_value->hand_pose);
 	} break;
 	}
+
+	return XRT_SUCCESS;
 }
 
-static void
+static xrt_result_t
 set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
 {
 	struct multi_device *d = (struct multi_device *)xdev;
 	struct xrt_device *target = d->tracking_override.target;
-	xrt_device_set_output(target, name, value);
+	return xrt_device_set_output(target, name, value);
 }
 
-static void
+static xrt_result_t
 get_view_poses(struct xrt_device *xdev,
                const struct xrt_vec3 *default_eye_relation,
                int64_t at_timestamp_ns,
@@ -199,14 +204,17 @@ get_view_poses(struct xrt_device *xdev,
 {
 	struct multi_device *d = (struct multi_device *)xdev;
 	struct xrt_device *target = d->tracking_override.target;
-	xrt_device_get_view_poses(target, default_eye_relation, at_timestamp_ns, view_count, out_head_relation,
-	                          out_fovs, out_poses);
+	xrt_result_t xret = xrt_device_get_view_poses(target, default_eye_relation, at_timestamp_ns, view_count,
+	                                              out_head_relation, out_fovs, out_poses);
+	if (xret != XRT_SUCCESS) {
+		return xret;
+	}
 
 	/*
 	 * Use xrt_device_ function to be sure it is exactly
 	 * like if the state-tracker called this function.
 	 */
-	xrt_device_get_tracked_pose(xdev, XRT_INPUT_GENERIC_HEAD_POSE, at_timestamp_ns, out_head_relation);
+	return xrt_device_get_tracked_pose(xdev, XRT_INPUT_GENERIC_HEAD_POSE, at_timestamp_ns, out_head_relation);
 }
 
 static bool
@@ -246,8 +254,8 @@ multi_create_tracking_override(enum xrt_tracking_override_type override_type,
 	d->base = *tracking_override_target;
 
 	// but take orientation and position tracking capabilities from tracker
-	d->base.orientation_tracking_supported = tracking_override_tracker->orientation_tracking_supported;
-	d->base.position_tracking_supported = tracking_override_tracker->position_tracking_supported;
+	d->base.supported.orientation_tracking = tracking_override_tracker->supported.orientation_tracking;
+	d->base.supported.position_tracking = tracking_override_tracker->supported.position_tracking;
 
 	// because we use the tracking data of the tracker, we use its tracking origin instead
 	d->base.tracking_origin = tracking_override_tracker->tracking_origin;

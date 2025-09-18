@@ -22,7 +22,6 @@
 #include <assert.h>
 
 #include "math/m_api.h"
-#include "math/m_clock_tracking.h"
 #include "math/m_space.h"
 #include "math/m_vec3.h"
 
@@ -180,18 +179,8 @@ handle_imu_update(struct rift_s_controller *ctrl,
 	ctrl->imu_timestamp32 = imu_timestamp;
 	ctrl->last_imu_local_time_ns = local_ts;
 
-	const float freq = 500.0;
-
-	time_duration_ns last_hw2mono = ctrl->hw2mono;
-	m_clock_offset_a2b(freq, ctrl->last_imu_device_time_ns, ctrl->last_imu_local_time_ns, &ctrl->hw2mono);
-	ctrl->last_hw2mono_delta_us = (ctrl->hw2mono - last_hw2mono) / 1000;
-
 	if (!ctrl->have_calibration || !ctrl->have_config)
 		return; /* We need to finish reading the calibration or config blocks first */
-
-	/* Get the smoothed monotonic time estimate for this IMU sample */
-	timepoint_ns local_timestamp_ns = ctrl->hw2mono + ctrl->last_imu_device_time_ns;
-	ctrl->last_imu_smoothed_local_time_ns = local_timestamp_ns;
 
 	const float gyro_scale = ctrl->config.gyro_scale;
 	const float accel_scale = MATH_GRAVITY_M_S2 * ctrl->config.accel_scale;
@@ -215,13 +204,6 @@ handle_imu_update(struct rift_s_controller *ctrl,
 
 	m_imu_3dof_update(&ctrl->fusion, ctrl->last_imu_device_time_ns, &ctrl->accel, &ctrl->gyro);
 	ctrl->pose.orientation = ctrl->fusion.rot;
-
-	struct xrt_imu_sample imu_sample = {.timestamp_ns = local_ts,
-	                                    .gyro_rad_secs = {ctrl->gyro.x, ctrl->gyro.y, ctrl->gyro.z},
-	                                    .accel_m_s2 = {ctrl->accel.x, ctrl->accel.y, ctrl->accel.z}};
-	struct xrt_vec3 accel_variance = {0.01, 0.01, 0.01};
-	struct xrt_vec3 gyro_variance = {0.01, 0.01, 0.01};
-	kalman_fusion_process_imu_data(ctrl->kalman_fusion, &imu_sample, &accel_variance, &gyro_variance);
 
 #if 0
 	RIFT_S_DEBUG("%" PRIx64 " dt %u device time %u ns %" PRIu64
@@ -531,21 +513,11 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 }
 
 static void
-rift_s_controller_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
-{
-	/* TODO: Implement haptic sending */
-}
-
-static void
 rift_s_controller_get_fusion_pose(struct rift_s_controller *ctrl,
                                   enum xrt_input_name name,
                                   int64_t at_timestamp_ns,
                                   struct xrt_space_relation *out_relation)
 {
-#if 1
-	kalman_fusion_get_prediction(ctrl->kalman_fusion, at_timestamp_ns, out_relation);
-	ctrl->pose = out_relation->pose;
-#else
 	out_relation->pose = ctrl->pose;
 	out_relation->linear_velocity.x = 0.0f;
 	out_relation->linear_velocity.y = 0.0f;
@@ -562,7 +534,6 @@ rift_s_controller_get_fusion_pose(struct rift_s_controller *ctrl,
 	out_relation->relation_flags = (enum xrt_space_relation_flags)(
 	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
 	    XRT_SPACE_RELATION_ANGULAR_VELOCITY_VALID_BIT | XRT_SPACE_RELATION_LINEAR_VELOCITY_VALID_BIT);
-#endif
 }
 
 static xrt_result_t
@@ -593,6 +564,11 @@ rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
 	struct xrt_space_relation *rel = m_relation_chain_reserve(&xrc);
 
 	rift_s_controller_get_fusion_pose(ctrl, name, at_timestamp_ns, rel);
+	if (ctrl->last_tracked_pose_ts != 0) {
+		rel->pose.position = ctrl->last_tracked_pose.position;
+		rel->relation_flags |= (enum xrt_space_relation_flags)(XRT_SPACE_RELATION_POSITION_VALID_BIT |
+		                                                       XRT_SPACE_RELATION_POSITION_TRACKED_BIT);
+	}
 	os_mutex_unlock(&ctrl->mutex);
 
 	m_relation_chain_resolve(&xrc, out_relation);
@@ -617,9 +593,6 @@ rift_s_controller_destroy(struct xrt_device *xdev)
 	/* Release the HMD reference */
 	rift_s_system_reference(&ctrl->sys, NULL);
 
-	if (ctrl->kalman_fusion)
-		kalman_fusion_destroy(ctrl->kalman_fusion);
-
 	u_var_remove_root(ctrl);
 
 	m_imu_3dof_close(&ctrl->fusion);
@@ -641,7 +614,8 @@ rift_s_controller_get_led_model(struct xrt_device *xdev, struct t_constellation_
 	}
 	os_mutex_unlock(&ctrl->mutex);
 
-	t_constellation_led_model_init((int)ctrl->base.device_type, NULL, led_model, ctrl->calibration.num_leds);
+	t_constellation_led_model_init((int)ctrl->base.device_type, NULL, led_model, ctrl->calibration.num_leds,
+	                               0);
 
 	// Note: This LED model is in OpenXR coordinates with
 	// XYZ = Right/Down/Forward. Flip to OpenCV for the constellation tracker
@@ -675,11 +649,6 @@ rift_s_controller_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame
 
 	ctrl->last_tracked_pose_ts = frame_mono_ns;
 	ctrl->last_tracked_pose = *pose;
-
-	struct xrt_pose_sample sample = {.pose = *pose, .timestamp_ns = frame_mono_ns};
-	struct xrt_vec3 position_variance = {1.e-6, 1.e-6, 1.e-6};
-	struct xrt_vec3 orientation_variance = {1.e-3, 1.e-5, 1.e-3};
-	kalman_fusion_process_pose(ctrl->kalman_fusion, &sample, &position_variance, &orientation_variance, 15);
 
 	if (ctrl->update_yaw_from_optical) {
 		// Apply 5% of observed orientation yaw to 3dof fusion
@@ -753,15 +722,15 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	ctrl->P_aim_grip.position = translation;
 
 	ctrl->base.update_inputs = rift_s_controller_update_inputs;
-	ctrl->base.set_output = rift_s_controller_set_output;
+	ctrl->base.set_output = u_device_ni_set_output;
 	ctrl->base.get_tracked_pose = rift_s_controller_get_tracked_pose;
 	ctrl->base.get_view_poses = u_device_get_view_poses;
 	ctrl->base.destroy = rift_s_controller_destroy;
 	ctrl->base.name = XRT_DEVICE_TOUCH_CONTROLLER;
 	ctrl->base.device_type = device_type;
 
-	ctrl->base.orientation_tracking_supported = true;
-	ctrl->base.position_tracking_supported = true;
+	ctrl->base.supported.orientation_tracking = true;
+	ctrl->base.supported.position_tracking = true;
 
 
 	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
@@ -772,7 +741,6 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 
 	ctrl->pose.orientation.w = 1.0f; // All other values set to zero by U_DEVICE_ALLOCATE (which calls U_CALLOC)
 	m_imu_3dof_init(&ctrl->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
-	ctrl->kalman_fusion = kalman_fusion_create();
 
 	// Real offset will be updated from the calibration once available
 	ctrl->P_imu_device = ctrl->P_device_imu = (struct xrt_pose)XRT_POSE_IDENTITY;
@@ -812,24 +780,13 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	ctrl->base.binding_profile_count = ARRAY_SIZE(binding_profiles_rift_s);
 
 	u_var_add_root(ctrl, ctrl->base.str, true);
-	u_var_add_pose(ctrl, &ctrl->P_aim_grip, "Grip pose offset");
-
 	u_var_add_gui_header(ctrl, NULL, "Tracking");
 	u_var_add_pose(ctrl, &ctrl->pose, "Tracked Pose");
-	u_var_add_ro_i64(ctrl, &ctrl->last_tracked_pose_ts, "Last Constellation Pose TS (ns)");
-	u_var_add_pose(ctrl, &ctrl->last_tracked_pose, "Last Constellation Pose");
 
-	u_var_add_gui_header(ctrl, NULL, "Kalman Fusion");
-	kalman_fusion_add_ui(ctrl->kalman_fusion, ctrl,
-	                     (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) ? "rift_s_left" : "rift_s_right");
+	u_var_add_pose(ctrl, &ctrl->P_aim_grip, "Grip pose offset");
 
 	u_var_add_gui_header(ctrl, NULL, "3DoF Tracking");
 	m_imu_3dof_add_vars(&ctrl->fusion, ctrl, "");
-	u_var_add_ro_i64(ctrl, &ctrl->last_imu_device_time_ns, "Controller device TS (ns)");
-	u_var_add_ro_i64(ctrl, &ctrl->last_imu_local_time_ns, "Last IMU sample local TS (ns)");
-	u_var_add_ro_i64(ctrl, &ctrl->hw2mono, "Device->local TS offset (ns)");
-	u_var_add_ro_i64(ctrl, &ctrl->last_imu_smoothed_local_time_ns, "Smoothed IMU local TS (ns)");
-	u_var_add_ro_i64(ctrl, &ctrl->last_hw2mono_delta_us, "Last Device->local TS offset change (µs)");
 
 	u_var_add_gui_header(ctrl, NULL, "Controls");
 	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {

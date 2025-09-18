@@ -145,8 +145,10 @@ debug_print_devices(struct oxr_logger *log, struct oxr_system *sys)
 	// Static roles.
 	struct xrt_device *h = GET_XDEV_BY_ROLE(sys, head);
 	struct xrt_device *e = GET_XDEV_BY_ROLE(sys, eyes);
-	struct xrt_device *hl = GET_XDEV_BY_ROLE(sys, hand_tracking_left);
-	struct xrt_device *hr = GET_XDEV_BY_ROLE(sys, hand_tracking_right);
+	struct xrt_device *uhl = GET_XDEV_BY_ROLE(sys, hand_tracking_unobstructed_left);
+	struct xrt_device *uhr = GET_XDEV_BY_ROLE(sys, hand_tracking_unobstructed_right);
+	struct xrt_device *chl = GET_XDEV_BY_ROLE(sys, hand_tracking_conforming_left);
+	struct xrt_device *chr = GET_XDEV_BY_ROLE(sys, hand_tracking_conforming_right);
 
 	// Dynamic roles, the system cache might not have been updated yet.
 	struct xrt_system_roles roles = XRT_SYSTEM_ROLES_INIT;
@@ -163,9 +165,11 @@ debug_print_devices(struct oxr_logger *log, struct oxr_system *sys)
 	        "\n\tLeft: '%s'"
 	        "\n\tRight: '%s'"
 	        "\n\tGamepad: '%s'"
-	        "\n\tHand-Tracking Left: '%s'"
-	        "\n\tHand-Tracking Right: '%s'",
-	        P(h), P(e), P(l), P(r), P(gp), P(hl), P(hr));
+	        "\n\tHand-Tracking Left (unobstructed): '%s'"
+	        "\n\tHand-Tracking Right (unobstructed): '%s'"
+	        "\n\tHand-Tracking Left (conforming): '%s'"
+	        "\n\tHand-Tracking Right (conforming): '%s'",
+	        P(h), P(e), P(l), P(r), P(gp), P(uhl), P(uhr), P(chl), P(chr));
 
 #undef P
 #undef D
@@ -300,6 +304,9 @@ oxr_instance_create(struct oxr_logger *log,
 #ifdef OXR_HAVE_EXT_hand_tracking
 	    .ext_hand_tracking_enabled = extensions->EXT_hand_tracking,
 #endif
+#ifdef OXR_HAVE_EXT_hand_tracking_data_source
+	    .ext_hand_tracking_data_source_enabled = extensions->EXT_hand_tracking_data_source,
+#endif
 #ifdef OXR_HAVE_EXT_eye_gaze_interaction
 	    .ext_eye_gaze_interaction_enabled = extensions->EXT_eye_gaze_interaction,
 #endif
@@ -314,6 +321,9 @@ oxr_instance_create(struct oxr_logger *log,
 #endif
 #ifdef OXR_HAVE_FB_face_tracking2
 	    .fb_face_tracking2_enabled = extensions->FB_face_tracking2,
+#endif
+#ifdef OXR_HAVE_META_body_tracking_full_body
+	    .meta_body_tracking_full_body_enabled = extensions->META_body_tracking_full_body,
 #endif
 	};
 	snprintf(i_info.app_info.application_name, sizeof(i_info.app_info.application_name), "%s",

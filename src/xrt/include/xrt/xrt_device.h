@@ -1,4 +1,5 @@
 // Copyright 2019-2024, Collabora, Ltd.
+// Copyright 2024-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -15,8 +16,6 @@
 #include "xrt/xrt_plane_detector.h"
 #include "xrt/xrt_visibility_mask.h"
 #include "xrt/xrt_limits.h"
-
-#include <stdalign.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -166,7 +165,7 @@ struct xrt_input
 	bool active;
 
 	//! alignas for 32 bit client support, see @ref ipc-design
-	alignas(8) int64_t timestamp;
+	XRT_ALIGNAS(8) int64_t timestamp;
 
 	enum xrt_input_name name;
 
@@ -244,6 +243,34 @@ struct xrt_output_limits
 };
 
 /*!
+ * Static data of supported features of the @ref xrt_device this struct sits on.
+ *
+ * This struct needs to always be a piece of data as it sits inside of the
+ * shared memory area in the IPC layer, so no pointers please.
+ *
+ * @ingroup xrt_iface
+ */
+struct xrt_device_supported
+{
+	bool orientation_tracking;
+	bool position_tracking;
+	bool hand_tracking;
+	bool eye_gaze;
+	bool presence;
+	bool force_feedback;
+	bool ref_space_usage;
+	bool form_factor_check;
+	bool stage;
+	bool face_tracking;
+	bool body_tracking;
+	bool battery_status;
+	bool brightness_control;
+
+	bool planes;
+	enum xrt_plane_detection_capability_flags_ext plane_capability_flags;
+};
+
+/*!
  * @interface xrt_device
  *
  * A single HMD or input device.
@@ -283,19 +310,9 @@ struct xrt_device
 	//! Array of output structs.
 	struct xrt_output *outputs;
 
-	bool orientation_tracking_supported;
-	bool position_tracking_supported;
-	bool hand_tracking_supported;
-	bool eye_gaze_supported;
-	bool force_feedback_supported;
-	bool ref_space_usage_supported;
-	bool form_factor_check_supported;
-	bool stage_supported;
-	bool face_tracking_supported;
-	bool body_tracking_supported;
-	bool battery_status_supported;
-	bool planes_supported;
-	enum xrt_plane_detection_capability_flags_ext plane_capability_flags;
+	//! What features/functions/things does this device supports?
+	struct xrt_device_supported supported;
+
 
 	/*
 	 *
@@ -362,11 +379,11 @@ struct xrt_device
 	 *
 	 * @see xrt_input_name
 	 */
-	void (*get_hand_tracking)(struct xrt_device *xdev,
-	                          enum xrt_input_name name,
-	                          int64_t desired_timestamp_ns,
-	                          struct xrt_hand_joint_set *out_value,
-	                          int64_t *out_timestamp_ns);
+	xrt_result_t (*get_hand_tracking)(struct xrt_device *xdev,
+	                                  enum xrt_input_name name,
+	                                  int64_t desired_timestamp_ns,
+	                                  struct xrt_hand_joint_set *out_value,
+	                                  int64_t *out_timestamp_ns);
 
 	/*!
 	 * @brief Get the requested blend shape properties & weights for a face tracker
@@ -424,7 +441,9 @@ struct xrt_device
 	 * @param[in] value          The value to set the output to.
 	 * @see xrt_output_name
 	 */
-	void (*set_output)(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value);
+	xrt_result_t (*set_output)(struct xrt_device *xdev,
+	                           enum xrt_output_name name,
+	                           const struct xrt_output_value *value);
 
 	/*!
 	 * Gets limits of this devices outputs.
@@ -433,6 +452,14 @@ struct xrt_device
 	 * @param[out] limits        The returned limits.
 	 */
 	xrt_result_t (*get_output_limits)(struct xrt_device *xdev, struct xrt_output_limits *limits);
+
+	/*!
+	 * @brief Get current presence status of the device.
+	 *
+	 * @param[in] xdev           The device.
+	 * @param[out] presence      The returned presence status.
+	 */
+	xrt_result_t (*get_presence)(struct xrt_device *xdev, bool *presence);
 
 	/*!
 	 * Begin a plane detection request
@@ -518,13 +545,13 @@ struct xrt_device
 	 *                         (Caution: Even if you have eye tracking, you
 	 *                         won't use eye orientation here!)
 	 */
-	void (*get_view_poses)(struct xrt_device *xdev,
-	                       const struct xrt_vec3 *default_eye_relation,
-	                       int64_t at_timestamp_ns,
-	                       uint32_t view_count,
-	                       struct xrt_space_relation *out_head_relation,
-	                       struct xrt_fov *out_fovs,
-	                       struct xrt_pose *out_poses);
+	xrt_result_t (*get_view_poses)(struct xrt_device *xdev,
+	                               const struct xrt_vec3 *default_eye_relation,
+	                               int64_t at_timestamp_ns,
+	                               uint32_t view_count,
+	                               struct xrt_space_relation *out_head_relation,
+	                               struct xrt_fov *out_fovs,
+	                               struct xrt_pose *out_poses);
 
 	/**
 	 * Compute the distortion at a single point.
@@ -601,6 +628,27 @@ struct xrt_device
 	                                   float *out_charge);
 
 	/*!
+	 * @brief Get the current display brightness.
+	 *
+	 * @param[in] xdev             The device.
+	 * @param[out] out_brightness  Current display brightness. Usually between 0 and 1. Some devices may
+	 *                             exceed 1 if the supported range exceeds 100%
+	 */
+	xrt_result_t (*get_brightness)(struct xrt_device *xdev, float *out_brightness);
+
+	/*!
+	 * @brief Set the display brightness.
+	 *
+	 * @param[in] xdev            The device.
+	 * @param[in] brightness      Desired display brightness. Usually between 0 and 1. Some devices may
+	 *                            allow exceeding 1 if the supported range exceeds 100%, but it will be clamped to
+	 *                            the supported range.
+	 * @param[in] relative        Whether to add \a brightness to the current brightness, instead of overwriting
+	 *                            the current brightness.
+	 */
+	xrt_result_t (*set_brightness)(struct xrt_device *xdev, float brightness, bool relative);
+
+	/*!
 	 * Enable the feature for this device.
 	 *
 	 * @param[in] xdev        The device.
@@ -660,14 +708,14 @@ xrt_device_get_tracked_pose(struct xrt_device *xdev,
  *
  * @public @memberof xrt_device
  */
-static inline void
+static inline xrt_result_t
 xrt_device_get_hand_tracking(struct xrt_device *xdev,
                              enum xrt_input_name name,
                              int64_t desired_timestamp_ns,
                              struct xrt_hand_joint_set *out_value,
                              int64_t *out_timestamp_ns)
 {
-	xdev->get_hand_tracking(xdev, name, desired_timestamp_ns, out_value, out_timestamp_ns);
+	return xdev->get_hand_tracking(xdev, name, desired_timestamp_ns, out_value, out_timestamp_ns);
 }
 
 /*!
@@ -724,10 +772,11 @@ xrt_device_get_body_joints(struct xrt_device *xdev,
  *
  * @public @memberof xrt_device
  */
-static inline void
+static inline xrt_result_t
 xrt_device_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
 {
 	xdev->set_output(xdev, name, value);
+	return XRT_SUCCESS;
 }
 
 static inline xrt_result_t
@@ -735,6 +784,23 @@ xrt_device_get_output_limits(struct xrt_device *xdev, struct xrt_output_limits *
 {
 	if (xdev->get_output_limits) {
 		return xdev->get_output_limits(xdev, limits);
+	} else {
+		return XRT_ERROR_NOT_IMPLEMENTED;
+	}
+}
+
+/*!
+ * Helper function for @ref xrt_device::get_presence.
+ *
+ * @copydoc xrt_device::get_presence
+ *
+ * @public @memberof xrt_device
+ */
+static inline xrt_result_t
+xrt_device_get_presence(struct xrt_device *xdev, bool *presence)
+{
+	if (xdev->get_presence) {
+		return xdev->get_presence(xdev, presence);
 	} else {
 		return XRT_ERROR_NOT_IMPLEMENTED;
 	}
@@ -797,7 +863,7 @@ xrt_device_get_plane_detections_ext(struct xrt_device *xdev,
  * @copydoc xrt_device::get_view_poses
  * @public @memberof xrt_device
  */
-static inline void
+static inline xrt_result_t
 xrt_device_get_view_poses(struct xrt_device *xdev,
                           const struct xrt_vec3 *default_eye_relation,
                           int64_t at_timestamp_ns,
@@ -806,8 +872,8 @@ xrt_device_get_view_poses(struct xrt_device *xdev,
                           struct xrt_fov *out_fovs,
                           struct xrt_pose *out_poses)
 {
-	xdev->get_view_poses(xdev, default_eye_relation, at_timestamp_ns, view_count, out_head_relation, out_fovs,
-	                     out_poses);
+	return xdev->get_view_poses(xdev, default_eye_relation, at_timestamp_ns, view_count, out_head_relation,
+	                            out_fovs, out_poses);
 }
 
 /*!
@@ -880,6 +946,30 @@ static inline xrt_result_t
 xrt_device_get_battery_status(struct xrt_device *xdev, bool *out_present, bool *out_charging, float *out_charge)
 {
 	return xdev->get_battery_status(xdev, out_present, out_charging, out_charge);
+}
+
+/*!
+ * Helper function for @ref xrt_device::get_brightness.
+ *
+ * @copydoc xrt_device::get_brightness
+ * @public @memberof xrt_device
+ */
+static inline xrt_result_t
+xrt_device_get_brightness(struct xrt_device *xdev, float *out_brightness)
+{
+	return xdev->get_brightness(xdev, out_brightness);
+}
+
+/*!
+ * Helper function for @ref xrt_device::set_brightness.
+ *
+ * @copydoc xrt_device::set_brightness
+ * @public @memberof xrt_device
+ */
+static inline xrt_result_t
+xrt_device_set_brightness(struct xrt_device *xdev, float brightness, bool relative)
+{
+	return xdev->set_brightness(xdev, brightness, relative);
 }
 
 /*!

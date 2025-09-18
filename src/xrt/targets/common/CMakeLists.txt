@@ -142,6 +142,10 @@ if(XRT_BUILD_DRIVER_REMOTE)
 	target_link_libraries(target_lists PRIVATE drv_remote)
 endif()
 
+if(XRT_BUILD_DRIVER_RIFT)
+	target_link_libraries(target_lists PRIVATE drv_rift)
+endif()
+
 if(XRT_BUILD_DRIVER_RIFT_S)
 	target_link_libraries(target_lists PRIVATE drv_rift_s)
 endif()

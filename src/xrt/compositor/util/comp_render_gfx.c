@@ -1,4 +1,5 @@
 // Copyright 2023-2024, Collabora, Ltd.
+// Copyright 2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -489,7 +490,7 @@ crg_clear_output(struct render_gfx *render, const struct comp_render_dispatch_da
 {
 	render_gfx_begin_target(     //
 	    render,                  //
-	    d->gfx.rtr,              //
+	    d->target.gfx.rtr,       //
 	    &background_color_idle); //
 
 	render_gfx_end_target(render);
@@ -519,16 +520,16 @@ crg_distortion_common(struct render_gfx *render,
 
 	struct gfx_mesh_state ms = XRT_STRUCT_INIT;
 
-	for (uint32_t i = 0; i < d->view_count; i++) {
+	for (uint32_t i = 0; i < d->target.view_count; i++) {
 
 		struct render_gfx_mesh_ubo_data data = {
-		    .vertex_rot = d->views[i].gfx.vertex_rot,
+		    .vertex_rot = d->views[i].target.gfx.vertex_rot,
 		    .post_transform = md->views[i].src_norm_rect,
 		};
 
 		// Extra arguments for timewarp.
 		if (do_timewarp) {
-			data.pre_transform = d->views[i].target_pre_transform;
+			data.pre_transform = d->views[i].pre_transform;
 
 			render_calc_time_warp_matrix( //
 			    &md->views[i].src_pose,   //
@@ -555,12 +556,12 @@ crg_distortion_common(struct render_gfx *render,
 
 	render_gfx_begin_target(       //
 	    render,                    //
-	    d->gfx.rtr,                //
+	    d->target.gfx.rtr,         //
 	    &background_color_active); //
 
-	for (uint32_t i = 0; i < d->view_count; i++) {
+	for (uint32_t i = 0; i < d->target.view_count; i++) {
 		// Convenience.
-		const struct render_viewport_data *viewport_data = &d->views[i].target_viewport_data;
+		const struct render_viewport_data *viewport_data = &d->views[i].target.viewport_data;
 
 		render_gfx_begin_view( //
 		    render,            //
@@ -594,11 +595,11 @@ crg_distortion_after_squash(struct render_gfx *render, const struct comp_render_
 	VkSampler clamp_to_border_black = render->r->samplers.clamp_to_border_black;
 
 	struct gfx_mesh_data md = XRT_STRUCT_INIT;
-	for (uint32_t i = 0; i < d->view_count; i++) {
+	for (uint32_t i = 0; i < d->target.view_count; i++) {
 		struct xrt_pose src_pose = d->views[i].world_pose;
 		struct xrt_fov src_fov = d->views[i].fov;
-		VkImageView src_image_view = d->views[i].srgb_view;
-		struct xrt_normalized_rect src_norm_rect = d->views[i].layer_norm_rect;
+		VkImageView src_image_view = d->views[i].squash_as_src.sample_view;
+		struct xrt_normalized_rect src_norm_rect = d->views[i].squash_as_src.norm_rect;
 
 		gfx_mesh_add_view(         //
 		    &md,                   //
@@ -630,7 +631,7 @@ crg_distortion_fast_path(struct render_gfx *render,
 	const VkSampler clamp_to_border_black = render->r->samplers.clamp_to_border_black;
 
 	struct gfx_mesh_data md = XRT_STRUCT_INIT;
-	for (uint32_t i = 0; i < d->view_count; i++) {
+	for (uint32_t i = 0; i < d->target.view_count; i++) {
 		const uint32_t array_index = vds[i]->sub.array_index;
 
 		const struct comp_swapchain_image *image = get_layer_image(layer, i, vds[i]->sub.image_index);
@@ -689,7 +690,7 @@ comp_render_gfx_layers(struct render_gfx *render,
 
 	// Compute MVP matrices per eye: populates gfx_layer_view_state elements in `ls`
 	// from `comp_render_dispatch_data *d`
-	for (uint32_t view = 0; view < d->view_count; view++) {
+	for (uint32_t view = 0; view < d->squash_view_count; view++) {
 
 		// Data for this view, convenience.
 		const struct xrt_pose world_pose = d->views[view].world_pose;
@@ -739,7 +740,7 @@ comp_render_gfx_layers(struct render_gfx *render,
 	VkSampler clamp_to_edge = render->r->samplers.clamp_to_edge;
 	VkSampler clamp_to_border_black = render->r->samplers.clamp_to_border_black;
 
-	for (uint32_t view = 0; view < d->view_count; view++) {
+	for (uint32_t view = 0; view < d->squash_view_count; view++) {
 
 		// Source for data and written to as well, read and write.
 		struct gfx_layer_view_state *state = &ls.views[view];
@@ -804,15 +805,15 @@ comp_render_gfx_layers(struct render_gfx *render,
 
 	const VkClearColorValue *color = layer_count == 0 ? &background_color_idle : &background_color_active;
 
-	for (uint32_t view = 0; view < d->view_count; view++) {
+	for (uint32_t view = 0; view < d->squash_view_count; view++) {
 
 		// Convenience.
-		const struct render_viewport_data *viewport_data = &d->views[view].layer_viewport_data;
+		const struct render_viewport_data *viewport_data = &d->views[view].squash.viewport_data;
 
-		render_gfx_begin_target(    //
-		    render,                 //
-		    d->views[view].gfx.rtr, //
-		    color);                 //
+		render_gfx_begin_target(           //
+		    render,                        //
+		    d->views[view].squash.gfx.rtr, //
+		    color);                        //
 
 		render_gfx_begin_view( //
 		    render,            //
@@ -859,7 +860,7 @@ comp_render_gfx_layers(struct render_gfx *render,
 	}
 
 
-	cmd_barrier_view_images(                           //
+	cmd_barrier_view_squash_images(                    //
 	    render->r->vk,                                 //
 	    d,                                             //
 	    render->r->cmd,                                // cmd
@@ -885,6 +886,12 @@ comp_render_gfx_dispatch(struct render_gfx *render,
                          const uint32_t layer_count,
                          const struct comp_render_dispatch_data *d)
 {
+	if (!d->target.initialized) {
+		VK_ERROR(render->r->vk, "Target hasn't been initialized, not rendering anything.");
+		assert(d->target.initialized);
+		return;
+	}
+
 	// Convenience.
 	bool fast_path = d->fast_path;
 
@@ -901,7 +908,7 @@ comp_render_gfx_dispatch(struct render_gfx *render,
 		// Fast path.
 		const struct xrt_layer_projection_data *proj = &layer->data.proj;
 		const struct xrt_layer_projection_view_data *vds[XRT_MAX_VIEWS];
-		for (uint32_t view = 0; view < d->view_count; ++view) {
+		for (uint32_t view = 0; view < d->target.view_count; ++view) {
 			vds[view] = &proj->v[view];
 		}
 		crg_distortion_fast_path( //
@@ -914,7 +921,7 @@ comp_render_gfx_dispatch(struct render_gfx *render,
 		// Fast path.
 		const struct xrt_layer_projection_depth_data *depth = &layer->data.depth;
 		const struct xrt_layer_projection_view_data *vds[XRT_MAX_VIEWS];
-		for (uint32_t view = 0; view < d->view_count; ++view) {
+		for (uint32_t view = 0; view < d->target.view_count; ++view) {
 			vds[view] = &depth->v[view];
 		}
 		crg_distortion_fast_path( //

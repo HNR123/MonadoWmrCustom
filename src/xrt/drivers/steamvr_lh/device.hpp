@@ -114,6 +114,12 @@ public:
 		vr::IVRDisplayComponent *display;
 	};
 
+	struct AnalogGainRange
+	{
+		float min{0.1f};
+		float max{1.0f};
+	};
+
 	HmdDevice(const DeviceBuilder &builder);
 
 	xrt_result_t
@@ -124,7 +130,7 @@ public:
 	                    const vr::HmdMatrix34_t &eyeToHeadLeft,
 	                    const vr::HmdMatrix34_t &eyeToHeadRight);
 
-	void
+	xrt_result_t
 	get_view_poses(const xrt_vec3 *default_eye_relation,
 	               uint64_t at_timestamp_ns,
 	               uint32_t view_count,
@@ -144,6 +150,11 @@ public:
 		return ipd;
 	}
 
+	xrt_result_t
+	get_brightness(float *out_brightness);
+	xrt_result_t
+	set_brightness(float brightness, bool relative);
+
 private:
 	std::unique_ptr<Parts> hmd_parts{nullptr};
 
@@ -155,6 +166,8 @@ private:
 
 	std::condition_variable hmd_parts_cv;
 	std::mutex hmd_parts_mut;
+	float brightness{1.0f};
+	AnalogGainRange analog_gain_range{};
 };
 
 class ControllerDevice : public Device
@@ -162,7 +175,7 @@ class ControllerDevice : public Device
 public:
 	ControllerDevice(vr::PropertyContainerHandle_t container_handle, const DeviceBuilder &builder);
 
-	void
+	xrt_result_t
 	set_output(xrt_output_name name, const xrt_output_value *value);
 
 	void
@@ -174,7 +187,7 @@ public:
 	IndexFingerInput *
 	get_finger_from_name(std::string_view name);
 
-	void
+	xrt_result_t
 	get_hand_tracking(enum xrt_input_name name,
 	                  int64_t desired_timestamp_ns,
 	                  struct xrt_hand_joint_set *out_value,

@@ -1,5 +1,5 @@
 // Copyright 2020-2024, Collabora, Ltd.
-// Copyright 2023, NVIDIA CORPORATION.
+// Copyright 2023-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -14,8 +14,6 @@
 #include "xrt/xrt_compiler.h"
 #include "xrt/xrt_defines.h"
 #include "xrt/xrt_device.h"
-
-#include <stdalign.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +43,7 @@ struct xrt_system_properties
 {
 	uint32_t vendor_id;
 	char name[XRT_MAX_SYSTEM_NAME_SIZE];
+	enum xrt_form_factor form_factor;
 };
 
 /*!
@@ -172,7 +171,7 @@ struct xrt_system_roles
 	 *
 	 * alignas for 32 bit client support, see @ref ipc-design
 	 */
-	alignas(8) uint64_t generation_id;
+	XRT_ALIGNAS(8) uint64_t generation_id;
 
 	/*!
 	 * Index in @ref xrt_system_devices::xdevs for the user's left
@@ -274,24 +273,47 @@ struct xrt_system_devices
 		 */
 		struct
 		{
+			struct
+			{
+				/*!
+				 * An observing pointer to the device providing
+				 * unobstructed hand-tracking for the left hand (optional).
+				 *
+				 * can reference the same xrt_device instance as
+				 * @ref hand_tracking::conforming::left, if provides both input types.
+				 */
+				struct xrt_device *left;
 
-			/*!
-			 * An observing pointer to the device providing hand
-			 * tracking for the left hand (optional).
-			 *
-			 * Currently this is used for both optical and
-			 * controller driven hand-tracking.
-			 */
-			struct xrt_device *left;
+				/*!
+				 * An observing pointer to the device providing
+				 * unobstructed hand-tracking for the right hand (optional).
+				 *
+				 * can reference the same xrt_device instance as
+				 * @ref hand_tracking::conforming::right, if provides both input types.
+				 */
+				struct xrt_device *right;
+			} unobstructed;
 
-			/*!
-			 * An observing pointer to the device providing hand
-			 * tracking for the right hand (optional).
-			 *
-			 * Currently this is used for both optical and
-			 * controller driven hand-tracking.
-			 */
-			struct xrt_device *right;
+			struct
+			{
+				/*!
+				 * An observing pointer to the device providing
+				 * conforming (controller) hand-tracking for the left hand (optional).
+				 *
+				 * can reference the same xrt_device instance as
+				 * @ref hand_tracking::unobstructed::left, if provides both input types.
+				 */
+				struct xrt_device *left;
+
+				/*!
+				 * An observing pointer to the device providing
+				 * conforming (controller) hand-tracking for the right hand (optional).
+				 *
+				 * can reference the same xrt_device instance as
+				 * @ref hand_tracking::unobstructed::right, if provides both input types.
+				 */
+				struct xrt_device *right;
+			} conforming;
 		} hand_tracking;
 	} static_roles;
 

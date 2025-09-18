@@ -74,18 +74,7 @@ r_hmd_get_tracked_pose(struct xrt_device *xdev,
 	return XRT_SUCCESS;
 }
 
-static void
-r_hmd_get_hand_tracking(struct xrt_device *xdev,
-                        enum xrt_input_name name,
-                        int64_t at_timestamp_ns,
-                        struct xrt_hand_joint_set *out_value,
-                        int64_t *out_timestamp_ns)
-{
-	struct r_hmd *rh = r_hmd(xdev);
-	(void)rh;
-}
-
-static void
+static xrt_result_t
 r_hmd_get_view_poses(struct xrt_device *xdev,
                      const struct xrt_vec3 *default_eye_relation,
                      int64_t at_timestamp_ns,
@@ -97,23 +86,17 @@ r_hmd_get_view_poses(struct xrt_device *xdev,
 	struct r_hmd *rh = r_hmd(xdev);
 
 	if (!rh->r->latest.head.per_view_data_valid) {
-		u_device_get_view_poses(  //
-		    xdev,                 //
-		    default_eye_relation, //
-		    at_timestamp_ns,      //
-		    view_count,           //
-		    out_head_relation,    //
-		    out_fovs,             //
-		    out_poses);           //
-
-		// Done now
-		return;
+		return u_device_get_view_poses( //
+		    xdev,                       //
+		    default_eye_relation,       //
+		    at_timestamp_ns,            //
+		    view_count,                 //
+		    out_head_relation,          //
+		    out_fovs,                   //
+		    out_poses);                 //
 	}
 
-	if (view_count > ARRAY_SIZE(rh->r->latest.head.views)) {
-		U_LOG_E("Asking for too many views!");
-		return;
-	}
+	assert(view_count <= ARRAY_SIZE(rh->r->latest.head.views));
 
 	copy_head_center_to_relation(rh, out_head_relation);
 
@@ -121,12 +104,8 @@ r_hmd_get_view_poses(struct xrt_device *xdev,
 		out_poses[i] = rh->r->latest.head.views[i].pose;
 		out_fovs[i] = rh->r->latest.head.views[i].fov;
 	}
-}
 
-static void
-r_hmd_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
-{
-	// Empty
+	return XRT_SUCCESS;
 }
 
 /*!
@@ -145,14 +124,14 @@ r_hmd_create(struct r_hub *r)
 	// Setup the basics.
 	rh->base.update_inputs = u_device_noop_update_inputs;
 	rh->base.get_tracked_pose = r_hmd_get_tracked_pose;
-	rh->base.get_hand_tracking = r_hmd_get_hand_tracking;
+	rh->base.get_hand_tracking = u_device_ni_get_hand_tracking;
 	rh->base.get_view_poses = r_hmd_get_view_poses;
-	rh->base.set_output = r_hmd_set_output;
+	rh->base.set_output = u_device_ni_set_output;
 	rh->base.destroy = r_hmd_destroy;
 	rh->base.tracking_origin = &r->origin;
-	rh->base.orientation_tracking_supported = true;
-	rh->base.position_tracking_supported = true;
-	rh->base.hand_tracking_supported = false;
+	rh->base.supported.orientation_tracking = true;
+	rh->base.supported.position_tracking = true;
+	rh->base.supported.hand_tracking = false;
 	rh->base.name = XRT_DEVICE_GENERIC_HMD;
 	rh->base.device_type = XRT_DEVICE_TYPE_HMD;
 	rh->base.inputs[0].name = XRT_INPUT_GENERIC_HEAD_POSE;

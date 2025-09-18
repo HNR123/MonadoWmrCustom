@@ -58,7 +58,7 @@ struct rift_s_tracker
 		struct xrt_vec3 last_angular_velocity;
 
 		//! When did we get the last IMU sample, device clock
-		timepoint_ns last_imu_timestamp_ns;
+		uint64_t last_imu_timestamp_ns;
 
 		//! Last IMU sample local system clock
 		timepoint_ns last_imu_local_timestamp_ns;
@@ -90,7 +90,6 @@ struct rift_s_tracker
 	bool have_hw2mono;
 	time_duration_ns hw2mono;
 	timepoint_ns last_frame_time;
-	time_duration_ns last_hw2mono_delta_us;
 
 	//! Adjustment to apply to camera timestamps to bring them into the
 	// same 32-bit range as the IMU times

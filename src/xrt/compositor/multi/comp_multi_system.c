@@ -414,11 +414,13 @@ update_session_state_locked(struct multi_system_compositor *msc)
 	const struct xrt_begin_session_info begin_session_info = {
 	    .view_type = XRT_VIEW_TYPE_STEREO,
 	    .ext_hand_tracking_enabled = false,
+	    .ext_hand_tracking_data_source_enabled = false,
 	    .ext_eye_gaze_interaction_enabled = false,
 	    .ext_hand_interaction_enabled = false,
 	    .htc_facial_tracking_enabled = false,
 	    .fb_body_tracking_enabled = false,
 	    .fb_face_tracking2_enabled = false,
+	    .meta_body_tracking_full_body_enabled = false,
 	};
 
 	switch (msc->sessions.state) {

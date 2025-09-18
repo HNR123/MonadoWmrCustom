@@ -135,21 +135,11 @@ struct ipc_shared_device
 	//! 'Offset' into the array of outputs where the outputs starts.
 	uint32_t first_output_index;
 
-	bool orientation_tracking_supported;
-	bool position_tracking_supported;
-	bool hand_tracking_supported;
-	bool eye_gaze_supported;
-	bool face_tracking_supported;
-	bool body_tracking_supported;
-	bool force_feedback_supported;
-	bool form_factor_check_supported;
-	bool stage_supported;
-	bool battery_status_supported;
-	bool planes_supported;
-	enum xrt_plane_detection_capability_flags_ext plane_capability_flags;
+	//! The supported fields.
+	struct xrt_device_supported supported;
 };
 
-static_assert(sizeof(struct ipc_shared_device) == 564,
+static_assert(sizeof(struct ipc_shared_device) == 568,
               "invalid structure size, maybe different 32/64 bits sizes or padding");
 
 /*!
@@ -254,8 +244,17 @@ struct ipc_shared_memory
 
 		struct
 		{
-			int32_t left;
-			int32_t right;
+			struct
+			{
+				int32_t left;
+				int32_t right;
+			} unobstructed;
+
+			struct
+			{
+				int32_t left;
+				int32_t right;
+			} conforming;
 		} hand_tracking;
 	} roles;
 
@@ -301,7 +300,7 @@ struct ipc_shared_memory
 	struct xrt_plane_detector_begin_info_ext plane_begin_info_ext;
 };
 
-static_assert(sizeof(struct ipc_shared_memory) == 6499920,
+static_assert(sizeof(struct ipc_shared_memory) == 6500056,
               "invalid structure size, maybe different 32/64 bits sizes or padding");
 
 /*!

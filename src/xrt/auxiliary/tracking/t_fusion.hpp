@@ -149,17 +149,17 @@ public:
 	}
 
 	template <typename State>
-	MeasurementVector
+	types::Vector<3>
 	predictMeasurement(State const &s) const
 	{
-		return (s.a().angularVelocity() - s.b().gyroBias());
+		return s.b().stateVector() + angVel_;
 	}
 
 	template <typename State>
 	MeasurementVector
 	getResidual(MeasurementVector const &predictedMeasurement, State const &s) const
 	{
-		return angVel_ - predictedMeasurement;
+		return predictedMeasurement - s.a().angularVelocity();
 	}
 
 	template <typename State>

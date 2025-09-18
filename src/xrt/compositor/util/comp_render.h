@@ -1,4 +1,5 @@
 // Copyright 2019-2024, Collabora, Ltd.
+// Copyright 2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -83,49 +84,74 @@ struct comp_render_view_data
 	struct xrt_fov fov;
 
 	/*!
-	 * The layer image for this view (aka scratch image),
-	 * used for barrier operations.
+	 * Go from UV to tanangle for both the target and layer image since
+	 * they share the same fov, this needs to match @p fov.
 	 */
-	VkImage image;
-
-	/*!
-	 * View into layer image (aka scratch image),
-	 * used for both GFX (read/write) and CS (read) paths.
-	 */
-	VkImageView srgb_view;
-
-	/*!
-	 * Pre-view layer target viewport_data (where in the image we should
-	 * render the view).
-	 */
-	struct render_viewport_data layer_viewport_data;
-
-	/*!
-	 * When sampling from the layer image (aka scratch image), how should we
-	 * transform it to get to the pixels correctly.
-	 */
-	struct xrt_normalized_rect layer_norm_rect;
-
-	//! Go from UV to tanangle for the target, this needs to match @p fov.
-	struct xrt_normalized_rect target_pre_transform;
-
-	// Distortion target viewport data (aka target).
-	struct render_viewport_data target_viewport_data;
+	struct xrt_normalized_rect pre_transform;
 
 	struct
 	{
-		//! Per-view layer target resources.
-		struct render_gfx_target_resources *rtr;
+		/*!
+		 * The layer image for this view (aka scratch image),
+		 * used for barrier operations.
+		 */
+		VkImage image;
 
-		//! Distortion target vertex rotation information.
-		struct xrt_matrix_2x2 vertex_rot;
-	} gfx;
+		/*!
+		 * Pre-view layer target viewport_data (where in the image we
+		 * should render the view).
+		 */
+		struct render_viewport_data viewport_data;
+
+		struct
+		{
+			//! Per-view layer target resources.
+			struct render_gfx_target_resources *rtr;
+		} gfx;
+
+		struct
+		{
+			/*!
+			 * View into layer image (aka scratch image), for used
+			 * as a storage tagert of the CS (write) path.
+			 */
+			VkImageView storage_view;
+		} cs;
+	} squash; // When used as a destination.
 
 	struct
 	{
-		//! Only used on compute path.
-		VkImageView unorm_view;
-	} cs;
+		/*!
+		 * When sampling from the layer image (aka scratch image), how
+		 * should we transform it to get to the pixels correctly.
+		 *
+		 * Ignored when doing a fast path and reading directly from
+		 * the app projection layer.
+		 */
+		struct xrt_normalized_rect norm_rect;
+
+		/*!
+		 * View into layer image (aka scratch image) when sampling the
+		 * image, used for both GFX (read) and CS (read) paths.
+		 *
+		 * Ignored when doing a fast path and reading directly from
+		 * the app projection layer.
+		 */
+		VkImageView sample_view;
+
+	} squash_as_src; // The input to the target/distortion shaders.
+
+	struct
+	{
+		// Distortion target viewport data (aka target).
+		struct render_viewport_data viewport_data;
+
+		struct
+		{
+			//! Distortion target vertex rotation information.
+			struct xrt_matrix_2x2 vertex_rot;
+		} gfx;
+	} target; // When used as a destination.
 };
 
 /*!
@@ -138,8 +164,11 @@ struct comp_render_dispatch_data
 {
 	struct comp_render_view_data views[XRT_MAX_VIEWS];
 
-	//! The number of views currently in this dispatch data.
-	uint32_t view_count;
+	/*!
+	 * The number of squash views currently in this dispatch data.
+	 */
+	uint32_t squash_view_count;
+
 
 	//! Fast path can be disabled for mirroing so needs to be an argument.
 	bool fast_path;
@@ -147,23 +176,52 @@ struct comp_render_dispatch_data
 	//! Very often true, can be disabled for debugging.
 	bool do_timewarp;
 
-	//! Members used only by GFX @ref comp_render_gfx
 	struct
 	{
-		//! The resources needed for the target.
-		struct render_gfx_target_resources *rtr;
-	} gfx;
+		//! Has this struct been setup to use the target.
+		bool initialized;
 
-	//! Members used only by CS @ref comp_render_cs
-	struct
-	{
-		//! Target image for distortion, used for barrier.
-		VkImage target_image;
+		/*!
+		 * The number of target views currently, when calling dispatch
+		 * this has to be either zero or the same number as
+		 * squash_view_count, see also the target.initialized field.
+		 */
+		uint32_t view_count;
 
-		//! Target image view for distortion.
-		VkImageView target_unorm_view;
-	} cs;
+		//! Members used only by GFX @ref comp_render_gfx
+		struct
+		{
+			//! The resources needed for the target.
+			struct render_gfx_target_resources *rtr;
+		} gfx;
+
+		//! Members used only by CS @ref comp_render_cs
+		struct
+		{
+			//! Target image for distortion, used for barrier.
+			VkImage image;
+
+			//! Target image view for distortion.
+			VkImageView storage_view;
+		} cs;
+	} target;
 };
+
+/*!
+ * Initialize structure for use without the target step.
+ *
+ * @param[out] data Common render dispatch data. Will be zeroed and initialized.
+ * @param fast_path Whether we will use the "fast path" avoiding layer squashing.
+ * @param do_timewarp Whether timewarp (reprojection) will be performed.
+ */
+static inline void
+comp_render_initial_init(struct comp_render_dispatch_data *data, bool fast_path, bool do_timewarp)
+{
+	U_ZERO(data);
+
+	data->fast_path = fast_path;
+	data->do_timewarp = do_timewarp;
+}
 
 /*!
  * Shared implementation setting up common view params between GFX and CS.
@@ -177,46 +235,66 @@ struct comp_render_dispatch_data
  *        Populates @ref comp_render_view_data::eye_pose
  * @param fov Assigned to fov in the view data, and used to compute @ref comp_render_view_data::target_pre_transform
  *        Populates @ref comp_render_view_data::fov
- * @param layer_viewport_data Where in the image to render the view
- *        Populates @ref comp_render_view_data::layer_viewport_data
- * @param layer_norm_rect How to transform when sampling from the scratch image.
- *        Populates @ref comp_render_view_data::layer_norm_rect
- * @param image Scratch image for this view
- *        Populates @ref comp_render_view_data::image
- * @param srgb_view SRGB image view into the scratch image
- *        Populates @ref comp_render_view_data::srgb_view
+ * @param squash_image Scratch image for this view
+ *        Populates @ref comp_render_view_data::squash::image
+ * @param squash_viewport_data Where in the image to render the view
+ *        Populates @ref comp_render_view_data::squash::viewport_data
+ * @param squash_as_src_sample_view The image view into the scratch image for sampling.
+ *        Populates @ref comp_render_view_data::squash_as_src::sample_view
+ * @param squash_as_src_norm_rect How to transform when sampling from the scratch image.
+ *        Populates @ref comp_render_view_data::squash_as_src::norm_rect
  * @param target_viewport_data Distortion target viewport data (aka target)
- *        Populates @ref comp_render_view_data::target_viewport_data
+ *        Populates @ref comp_render_view_data::target::viewport_data
 
  * @return Pointer to the @ref comp_render_view_data we have been populating, for additional setup.
  */
 static inline struct comp_render_view_data *
-comp_render_dispatch_add_view(struct comp_render_dispatch_data *data,
-                              const struct xrt_pose *world_pose,
-                              const struct xrt_pose *eye_pose,
-                              const struct xrt_fov *fov,
-                              const struct render_viewport_data *layer_viewport_data,
-                              const struct xrt_normalized_rect *layer_norm_rect,
-                              VkImage image,
-                              VkImageView srgb_view,
-                              const struct render_viewport_data *target_viewport_data)
+comp_render_dispatch_add_squash_view(struct comp_render_dispatch_data *data,
+                                     const struct xrt_pose *world_pose,
+                                     const struct xrt_pose *eye_pose,
+                                     const struct xrt_fov *fov,
+                                     VkImage squash_image,
+                                     const struct render_viewport_data *squash_viewport_data)
 {
-	uint32_t i = data->view_count++;
+	uint32_t i = data->squash_view_count++;
 
 	assert(i < ARRAY_SIZE(data->views));
 
 	struct comp_render_view_data *view = &data->views[i];
 
-	render_calc_uv_to_tangent_lengths_rect(fov, &view->target_pre_transform);
+	render_calc_uv_to_tangent_lengths_rect(fov, &view->pre_transform);
 
+	// Common
 	view->world_pose = *world_pose;
 	view->eye_pose = *eye_pose;
 	view->fov = *fov;
-	view->image = image;
-	view->srgb_view = srgb_view;
-	view->layer_viewport_data = *layer_viewport_data;
-	view->layer_norm_rect = *layer_norm_rect;
-	view->target_viewport_data = *target_viewport_data;
+
+	// When writing into the squash (aka scratch) image.
+	view->squash.image = squash_image;
+	view->squash.viewport_data = *squash_viewport_data;
+
+	return view;
+}
+
+static inline struct comp_render_view_data *
+comp_render_dispatch_add_target_view(struct comp_render_dispatch_data *data,
+                                     VkImageView squash_as_src_sample_view,
+                                     const struct xrt_normalized_rect *squash_as_src_norm_rect,
+                                     const struct render_viewport_data *target_viewport_data)
+{
+	uint32_t i = data->target.view_count++;
+
+	assert(i < data->squash_view_count);
+	assert(i < ARRAY_SIZE(data->views));
+
+	struct comp_render_view_data *view = &data->views[i];
+
+	// When using the squash (aka scratch) image as a source.
+	view->squash_as_src.sample_view = squash_as_src_sample_view;
+	view->squash_as_src.norm_rect = *squash_as_src_norm_rect;
+
+	// When writing into the target.
+	view->target.viewport_data = *target_viewport_data;
 
 	return view;
 }
@@ -245,22 +323,17 @@ comp_render_dispatch_add_view(struct comp_render_dispatch_data *data,
 /*!
  * Initialize structure for use of the GFX renderer.
  *
- * @param[out] data Common render dispatch data. Will be zeroed and initialized.
- * @param rtr GFX-specific resources for the entire frameedg. Must be populated before call.
- * @param fast_path Whether we will use the "fast path" avoiding layer squashing.
- * @param do_timewarp Whether timewarp (reprojection) will be performed.
+ * @param[in,out] data Common render dispatch data.
+ * @param target_rtr GFX-specific resources for the entire framebuffer. Must be populated before call.
  */
 static inline void
-comp_render_gfx_initial_init(struct comp_render_dispatch_data *data,
-                             struct render_gfx_target_resources *rtr,
-                             bool fast_path,
-                             bool do_timewarp)
+comp_render_gfx_add_target(struct comp_render_dispatch_data *data, struct render_gfx_target_resources *target_rtr)
 {
-	U_ZERO(data);
+	// Error tracking.
+	data->target.initialized = true;
 
-	data->fast_path = fast_path;
-	data->do_timewarp = do_timewarp;
-	data->gfx.rtr = rtr;
+	// When writing into the target.
+	data->target.gfx.rtr = target_rtr;
 }
 
 /*!
@@ -272,48 +345,58 @@ comp_render_gfx_initial_init(struct comp_render_dispatch_data *data,
  * @param eye_pose New eye pose of this view
  *        Populates @ref comp_render_view_data::eye_pose
  * @param fov Assigned to fov in the view data, and used to
- *        compute @ref comp_render_view_data::target_pre_transform - also
+ *        compute @ref comp_render_view_data::pre_transform - also
  *        populates @ref comp_render_view_data::fov
- * @param rtr Will be associated with this view. GFX-specific
+ * @param layer_image Scratch image for this view
+ *        Populates @ref comp_render_view_data::squash::image
+ * @param later_rtr Will be associated with this view. GFX-specific
  * @param layer_viewport_data Where in the image to render the view
- *        Populates @ref comp_render_view_data::layer_viewport_data
- * @param layer_norm_rect How to transform when sampling from the scratch image.
- *        Populates @ref comp_render_view_data::layer_norm_rect
- * @param image Scratch image for this view
- *        Populates @ref comp_render_view_data::image
- * @param srgb_view SRGB image view into the scratch image
- *        Populates @ref comp_render_view_data::srgb_view
- * @param vertex_rot
+ *        Populates @ref comp_render_view_data::squash::viewport_data
+ * @param squash_as_src_norm_rect How to transform when sampling from the scratch image.
+ *        Populates @ref comp_render_view_data::squash_as_src::norm_rect
+ * @param squash_as_src_sample_view The image view into the scratch image for sampling.
+ *        Populates @ref comp_render_view_data::squash_as_src::sample_view
+ * @param target_vertex_rot
+ *        Populates @ref comp_render_view_data::target.gfx.vertex_rot
  * @param target_viewport_data Distortion target viewport data (aka target)
- *        Populates @ref comp_render_view_data::target_viewport_data
+ *        Populates @ref comp_render_view_data::target.viewport_data
  */
 static inline void
-comp_render_gfx_add_view(struct comp_render_dispatch_data *data,
-                         const struct xrt_pose *world_pose,
-                         const struct xrt_pose *eye_pose,
-                         const struct xrt_fov *fov,
-                         struct render_gfx_target_resources *rtr,
-                         const struct render_viewport_data *layer_viewport_data,
-                         const struct xrt_normalized_rect *layer_norm_rect,
-                         VkImage image,
-                         VkImageView srgb_view,
-                         const struct xrt_matrix_2x2 *vertex_rot,
-                         const struct render_viewport_data *target_viewport_data)
+comp_render_gfx_add_squash_view(struct comp_render_dispatch_data *data,
+                                const struct xrt_pose *world_pose,
+                                const struct xrt_pose *eye_pose,
+                                const struct xrt_fov *fov,
+                                VkImage squash_image,
+                                struct render_gfx_target_resources *squash_rtr,
+                                const struct render_viewport_data *layer_viewport_data)
 {
-	struct comp_render_view_data *view = comp_render_dispatch_add_view( //
-	    data,                                                           //
-	    world_pose,                                                     //
-	    eye_pose,                                                       //
-	    fov,                                                            //
-	    layer_viewport_data,                                            //
-	    layer_norm_rect,                                                //
-	    image,                                                          //
-	    srgb_view,                                                      //
-	    target_viewport_data);
+	struct comp_render_view_data *view = comp_render_dispatch_add_squash_view( //
+	    data,                                                                  //
+	    world_pose,                                                            //
+	    eye_pose,                                                              //
+	    fov,                                                                   //
+	    squash_image,                                                          //
+	    layer_viewport_data);                                                  //
 
-	// TODO why is the one in data not used instead
-	view->gfx.rtr = rtr;
-	view->gfx.vertex_rot = *vertex_rot;
+	// When writing into the squash (aka scratch) image.
+	view->squash.gfx.rtr = squash_rtr;
+}
+
+static inline void
+comp_render_gfx_add_target_view(struct comp_render_dispatch_data *data,
+                                VkImageView squash_as_src_sample_view,
+                                const struct xrt_normalized_rect *squash_as_src_norm_rect,
+                                const struct xrt_matrix_2x2 *target_vertex_rot,
+                                const struct render_viewport_data *target_viewport_data)
+{
+	struct comp_render_view_data *view = comp_render_dispatch_add_target_view( //
+	    data,                                                                  //
+	    squash_as_src_sample_view,                                             //
+	    squash_as_src_norm_rect,                                               //
+	    target_viewport_data);                                                 //
+
+	// When writing into the target.
+	view->target.gfx.vertex_rot = *target_vertex_rot;
 }
 
 /*!
@@ -413,28 +496,21 @@ comp_render_gfx_dispatch(struct render_gfx *render,
  */
 
 /*!
- * Initialize structure for use of the CS renderer.
+ * Add the target info, as required by the CS renderer.
  *
- * @param data Common render dispatch data. Will be zeroed and initialized.
+ * @param[in,out] data Common render dispatch data.
  * @param target_image Image to render into
- * @param target_unorm_view Corresponding image view
- * @param fast_path Whether we will use the "fast path" avoiding layer squashing.
- * @param do_timewarp Whether timewarp (reprojection) will be performed.
+ * @param target_storage_view Corresponding image view
  */
 static inline void
-comp_render_cs_initial_init(struct comp_render_dispatch_data *data,
-                            VkImage target_image,
-                            VkImageView target_unorm_view,
-                            bool fast_path,
-                            bool do_timewarp)
+comp_render_cs_add_target(struct comp_render_dispatch_data *data, VkImage target_image, VkImageView target_storage_view)
 {
-	U_ZERO(data);
+	// Error tracking.
+	data->target.initialized = true;
 
-	data->fast_path = fast_path;
-	data->do_timewarp = do_timewarp;
-
-	data->cs.target_image = target_image;
-	data->cs.target_unorm_view = target_unorm_view;
+	// When writing into the target.
+	data->target.cs.image = target_image;
+	data->target.cs.storage_view = target_storage_view;
 }
 
 /*!
@@ -445,44 +521,53 @@ comp_render_cs_initial_init(struct comp_render_dispatch_data *data,
  *        Populates @ref comp_render_view_data::world_pose
  * @param eye_pose New eye pose of this view
  *        Populates @ref comp_render_view_data::eye_pose
- * @param fov Assigned to fov in the view data, and used to compute @ref comp_render_view_data::target_pre_transform
+ * @param fov Assigned to fov in the view data, and used to compute @ref comp_render_view_data::pre_transform.
  *        Populates @ref comp_render_view_data::fov
- * @param layer_viewport_data Where in the image to render the view
- *        Populates @ref comp_render_view_data::layer_viewport_data
- * @param layer_norm_rect How to transform when sampling from the scratch image.
- *        Populates @ref comp_render_view_data::layer_norm_rect
- * @param image Scratch image for this view
- *        Populates @ref comp_render_view_data::image
- * @param srgb_view SRGB image view into the scratch image
- *        Populates @ref comp_render_view_data::srgb_view
- * @param unorm_view UNORM image view into the scratch image, CS specific
+ * @param squash_image Scratch image for this view
+ *        Populates @ref comp_render_view_data::squash::image
+ * @param squash_storage_view Image view into the scratch image for storage, CS specific
+ * @param squash_viewport_data Where in the image to render the view
+ *        Populates @ref comp_render_view_data::squash::viewport_data
+ * @param squash_as_src_sample_view The image view into the scratch image for sampling.
+ *        Populates @ref comp_render_view_data::squash_as_src::sample_view
+ * @param squash_as_src_norm_rect How to transform when sampling from the scratch image.
+ *        Populates @ref comp_render_view_data::squash_as_src::norm_rect
  * @param target_viewport_data Distortion target viewport data (aka target)
- *        Populates @ref comp_render_view_data::target_viewport_data
+ *        Populates @ref comp_render_view_data::target::viewport_data
  */
 static inline void
-comp_render_cs_add_view(struct comp_render_dispatch_data *data,
-                        const struct xrt_pose *world_pose,
-                        const struct xrt_pose *eye_pose,
-                        const struct xrt_fov *fov,
-                        const struct render_viewport_data *layer_viewport_data,
-                        const struct xrt_normalized_rect *layer_norm_rect,
-                        VkImage image,
-                        VkImageView srgb_view,
-                        VkImageView unorm_view,
-                        const struct render_viewport_data *target_viewport_data)
+comp_render_cs_add_squash_view(struct comp_render_dispatch_data *data,
+                               const struct xrt_pose *world_pose,
+                               const struct xrt_pose *eye_pose,
+                               const struct xrt_fov *fov,
+                               VkImage squash_image,
+                               VkImageView squash_storage_view,
+                               const struct render_viewport_data *squash_viewport_data)
 {
-	struct comp_render_view_data *view = comp_render_dispatch_add_view( //
-	    data,                                                           //
-	    world_pose,                                                     //
-	    eye_pose,                                                       //
-	    fov,                                                            //
-	    layer_viewport_data,                                            //
-	    layer_norm_rect,                                                //
-	    image,                                                          //
-	    srgb_view,                                                      //
-	    target_viewport_data);
+	struct comp_render_view_data *view = comp_render_dispatch_add_squash_view( //
+	    data,                                                                  //
+	    world_pose,                                                            //
+	    eye_pose,                                                              //
+	    fov,                                                                   //
+	    squash_image,                                                          //
+	    squash_viewport_data);                                                 //
 
-	view->cs.unorm_view = unorm_view;
+	// When writing into the squash (aka scratch) image.
+	view->squash.cs.storage_view = squash_storage_view;
+}
+
+static inline void
+comp_render_cs_add_target_view(struct comp_render_dispatch_data *data,
+                               VkImageView squash_as_src_sample_view,
+                               const struct xrt_normalized_rect *squash_as_src_norm_rect,
+                               const struct render_viewport_data *target_viewport_data)
+{
+	struct comp_render_view_data *view = comp_render_dispatch_add_target_view( //
+	    data,                                                                  //
+	    squash_as_src_sample_view,                                             //
+	    squash_as_src_norm_rect,                                               //
+	    target_viewport_data);                                                 //
+	(void)view;
 }
 
 /*!

@@ -87,7 +87,7 @@ ulv5_device(struct xrt_device *xdev)
 	return (struct ulv5_device *)xdev;
 }
 
-static void
+static xrt_result_t
 ulv5_device_get_hand_tracking(struct xrt_device *xdev,
                               enum xrt_input_name name,
                               int64_t at_timestamp_ns,
@@ -96,12 +96,12 @@ ulv5_device_get_hand_tracking(struct xrt_device *xdev,
 {
 	struct ulv5_device *ulv5d = ulv5_device(xdev);
 
-	if (name != XRT_INPUT_GENERIC_HAND_TRACKING_LEFT && name != XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT) {
-		ULV5_ERROR(ulv5d, "unknown input name for hand tracker");
-		return;
+	if (name != XRT_INPUT_HT_UNOBSTRUCTED_LEFT && name != XRT_INPUT_HT_UNOBSTRUCTED_RIGHT) {
+		U_LOG_XDEV_UNSUPPORTED_INPUT(&ulv5d->base, ulv5d->log_level, name);
+		return XRT_ERROR_INPUT_UNSUPPORTED;
 	}
 
-	bool hand_index = (name == XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT); // 0 if left, 1 if right.
+	bool hand_index = (name == XRT_INPUT_HT_UNOBSTRUCTED_RIGHT); // 0 if left, 1 if right.
 
 	bool hand_valid = ulv5d->hand_exists[hand_index];
 
@@ -119,6 +119,8 @@ ulv5_device_get_hand_tracking(struct xrt_device *xdev,
 	}
 	// still a lie...
 	*out_timestamp_ns = at_timestamp_ns;
+
+	return XRT_SUCCESS;
 }
 
 // todo: cleanly shutdown the LEAP_CONNECTION
@@ -315,13 +317,13 @@ ulv5_create_device(struct xrt_device **out_xdev)
 	strncpy(ulv5d->base.str, "Leap Motion v5 driver", XRT_DEVICE_NAME_LEN);
 	strncpy(ulv5d->base.serial, "Leap Motion v5 driver", XRT_DEVICE_NAME_LEN);
 
-	ulv5d->base.inputs[0].name = XRT_INPUT_GENERIC_HAND_TRACKING_LEFT;
-	ulv5d->base.inputs[1].name = XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT;
+	ulv5d->base.inputs[0].name = XRT_INPUT_HT_UNOBSTRUCTED_LEFT;
+	ulv5d->base.inputs[1].name = XRT_INPUT_HT_UNOBSTRUCTED_RIGHT;
 
 	ulv5d->base.name = XRT_DEVICE_HAND_TRACKER;
 
 	ulv5d->base.device_type = XRT_DEVICE_TYPE_HAND_TRACKER;
-	ulv5d->base.hand_tracking_supported = true;
+	ulv5d->base.supported.hand_tracking = true;
 
 	u_var_add_root(ulv5d, "Leap Motion v5 driver", true);
 	u_var_add_ro_text(ulv5d, ulv5d->base.str, "Name");

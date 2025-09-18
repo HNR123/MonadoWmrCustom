@@ -1,4 +1,5 @@
 // Copyright 2022, Collabora, Ltd.
+// Copyright 2024-2025, NVIDIA CORPORATION.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
@@ -78,6 +79,14 @@ void
 u_pp_xrt_input_name(struct u_pp_delegate dg, enum xrt_input_name name);
 
 /*!
+ * Pretty prints the @ref xrt_output_name.
+ *
+ * @ingroup aux_pretty
+ */
+void
+u_pp_xrt_output_name(struct u_pp_delegate dg, enum xrt_output_name name);
+
+/*!
  * Pretty prints the @ref xrt_result_t.
  *
  * @ingroup aux_pretty
@@ -92,6 +101,20 @@ u_pp_xrt_result(struct u_pp_delegate dg, xrt_result_t xret);
  */
 void
 u_pp_xrt_reference_space_type(struct u_pp_delegate dg, enum xrt_reference_space_type type);
+
+
+/*!
+ * Pretty prints a milliseconds padded to be at least 16 characters, the
+ * formatting is meant to be human readable, does not use locale.
+ *
+ * Formatted as:  " M'TTT'###.FFFms"
+ * Zero:          "         0.000ms"
+ *
+ * If the value is 10 seconds or larger (MM) then it will be longer then 16
+ * characters.
+ */
+void
+u_pp_padded_pretty_ms(u_pp_delegate_t dg, uint64_t value_ns);
 
 
 /*

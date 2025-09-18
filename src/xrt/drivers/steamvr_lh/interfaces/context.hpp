@@ -55,7 +55,10 @@ class Context final : public xrt_tracking_origin,
                       public std::enable_shared_from_this<Context>
 
 {
+public:
 	Settings settings;
+
+private:
 	Resources resources;
 	IOBuffer iobuf;
 	DriverManager man;
@@ -135,6 +138,12 @@ public:
 
 	void
 	add_haptic_event(vr::VREvent_HapticVibration_t event);
+
+	void
+	add_vendor_event(vr::EVREventType type, const vr::VREvent_Data_t &data = {})
+	{
+		VendorSpecificEvent(0, type, data, 0);
+	}
 
 	void
 	Log(const char *pchLogMessage) override;

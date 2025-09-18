@@ -131,12 +131,13 @@ u_device_free(struct xrt_device *xdev);
 #define XRT_DEVICE_ROLE_UNASSIGNED (-1)
 
 /*!
- * Helper function to assign head, left hand and right hand roles.
+ * Helper function to assign head, left hand, right hand, and gamepad roles.
  *
  * @ingroup aux_util
  */
 void
-u_device_assign_xdev_roles(struct xrt_device **xdevs, size_t xdev_count, int *head, int *left, int *right);
+u_device_assign_xdev_roles(
+    struct xrt_device **xdevs, size_t xdev_count, int *head, int *left, int *right, int *gamepad);
 
 /*!
  * Helper function for `get_view_pose` in an HMD driver.
@@ -166,7 +167,7 @@ u_device_get_view_pose(const struct xrt_vec3 *eye_relation, uint32_t view_index,
  *
  * The field @ref xrt_device::hmd needs to be set and valid.
  */
-void
+xrt_result_t
 u_device_get_view_poses(struct xrt_device *xdev,
                         const struct xrt_vec3 *default_eye_relation,
                         int64_t at_timestamp_ns,
@@ -213,19 +214,19 @@ u_device_noop_update_inputs(struct xrt_device *xdev);
  *
  * @ingroup aux_util
  */
-void
+xrt_result_t
 u_device_ni_get_hand_tracking(struct xrt_device *xdev,
                               enum xrt_input_name name,
-                              uint64_t desired_timestamp_ns,
+                              int64_t desired_timestamp_ns,
                               struct xrt_hand_joint_set *out_value,
-                              uint64_t *out_timestamp_ns);
+                              int64_t *out_timestamp_ns);
 
 /*!
  * Not implemented function for @ref xrt_device::set_output.
  *
  * @ingroup aux_util
  */
-void
+xrt_result_t
 u_device_ni_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value);
 
 /*!
@@ -233,7 +234,7 @@ u_device_ni_set_output(struct xrt_device *xdev, enum xrt_output_name name, const
  *
  * @ingroup aux_util
  */
-void
+xrt_result_t
 u_device_ni_get_view_poses(struct xrt_device *xdev,
                            const struct xrt_vec3 *default_eye_relation,
                            int64_t at_timestamp_ns,

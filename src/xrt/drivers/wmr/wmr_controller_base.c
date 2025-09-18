@@ -106,21 +106,19 @@ wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
 		return;
 	}
 
-	WMR_TRACE(wcb, "Accel [m/s^2] : %f", m_vec3_len(imu_sample->acc));
+	float accel_m_p_s_2 = m_vec3_len(imu_sample->acc);
+	WMR_TRACE(wcb, "Accel [m/s^2] : %f", accel_m_p_s_2);
+
+	// if it accelerates quite quickly, then we up the brightness to make it easier to find constellation poses
+	if (accel_m_p_s_2 > 20) {
+		wcb->timesync_led_intensity = MIN(wcb->timesync_led_intensity + 10, 399);
+	}
 
 	m_imu_3dof_update(&wcb->fusion, mono_time_ns, &imu_sample->acc, &imu_sample->gyro);
 	wcb->last_imu_timestamp_ns = mono_time_ns;
 	wcb->last_imu_device_timestamp_ns = now_hw_ns;
 	wcb->last_angular_velocity = imu_sample->gyro;
 	wcb->last_imu = *imu_sample;
-
-	struct xrt_imu_sample k_imu_sample = {
-	    .timestamp_ns = mono_time_ns,
-	    .gyro_rad_secs = {imu_sample->gyro.x, imu_sample->gyro.y, imu_sample->gyro.z},
-	    .accel_m_s2 = {imu_sample->acc.x, imu_sample->acc.y, imu_sample->acc.z}};
-	struct xrt_vec3 accel_variance = {0.01, 0.01, 0.01};
-	struct xrt_vec3 gyro_variance = {0.01, 0.01, 0.01};
-	kalman_fusion_process_imu_data(wcb->kalman_fusion, &k_imu_sample, &accel_variance, &gyro_variance);
 }
 
 static void
@@ -531,26 +529,12 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	struct wmr_controller_base *wcb = wmr_controller_base(xdev);
 
 	struct xrt_relation_chain xrc = {0};
-	struct xrt_space_relation relation = {0};
 
-	if (name == XRT_INPUT_G2_CONTROLLER_AIM_POSE || name == XRT_INPUT_ODYSSEY_CONTROLLER_AIM_POSE ||
-		name == XRT_INPUT_WMR_AIM_POSE)
-		m_relation_chain_push_pose(&xrc, &wcb->P_aim);
-
+	m_relation_chain_push_pose(&xrc, &wcb->P_aim);
 	if (name == XRT_INPUT_G2_CONTROLLER_GRIP_POSE || name == XRT_INPUT_ODYSSEY_CONTROLLER_GRIP_POSE ||
-		name == XRT_INPUT_WMR_GRIP_POSE) {
-		m_relation_chain_push_pose(&xrc, &wcb->P_aim);
-	m_relation_chain_push_pose(&xrc, &wcb->P_aim_grip);
-		}
-
-
-#if 1
-	kalman_fusion_get_prediction(wcb->kalman_fusion, at_timestamp_ns, &relation);
-
-	m_relation_chain_push_relation(&xrc, &relation);
-	m_relation_chain_resolve(&xrc, out_relation);
-
-#else
+	    name == XRT_INPUT_WMR_GRIP_POSE) {
+		m_relation_chain_push_pose(&xrc, &wcb->P_aim_grip);
+	}
 
 	/* Apply the controller rotation */
 	struct xrt_pose pose = {{0, 0, 0, 1}, {0, 1.2, -0.5}};
@@ -562,6 +546,7 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 
 	// Variables needed for prediction.
 	int64_t last_imu_timestamp_ns = 0;
+	struct xrt_space_relation relation = {0};
 	relation.relation_flags = (enum xrt_space_relation_flags)(
 	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
 	    XRT_SPACE_RELATION_POSITION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT |
@@ -594,9 +579,8 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	double prediction_s = time_ns_to_s(prediction_ns);
 
 	m_predict_relation(&relation, prediction_s, out_relation);
-#endif
-
 	wcb->pose = out_relation->pose;
+
 	return XRT_SUCCESS;
 }
 
@@ -631,9 +615,6 @@ wmr_controller_base_deinit(struct wmr_controller_base *wcb)
 
 	// Destroy the fusion.
 	m_imu_3dof_close(&wcb->fusion);
-
-	if (wcb->kalman_fusion)
-		kalman_fusion_destroy(wcb->kalman_fusion);
 }
 
 /*
@@ -674,9 +655,9 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 
 	wcb->base.name = XRT_DEVICE_WMR_CONTROLLER;
 	wcb->base.device_type = controller_type;
-	wcb->base.orientation_tracking_supported = true;
-	wcb->base.position_tracking_supported = true;
-	wcb->base.hand_tracking_supported = false;
+	wcb->base.supported.orientation_tracking = true;
+	wcb->base.supported.position_tracking = true;
+	wcb->base.supported.hand_tracking = false;
 
 	/* Default grip pose up by 35° degrees around the X axis and
 	 * back about 10cm (back is +Z in OXR coords), but overridden
@@ -686,10 +667,14 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	math_quat_from_angle_vector(DEG_TO_RAD(35), &axis, &wcb->P_aim_grip.orientation);
 	wcb->P_aim_grip.position = translation;
 
+	struct xrt_vec3 aim_translation = {-0.014322, 0.018838, 0};
+	wcb->P_aim.position = aim_translation;
+	struct xrt_vec3 aim_axis = {0.0, 1.0, 0};
+	math_quat_from_angle_vector(DEG_TO_RAD(12.5), &aim_axis, &wcb->P_aim.orientation);
+
 	wcb->thumbstick_deadzone = 0.15;
 
 	m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
-	wcb->kalman_fusion = kalman_fusion_create();
 
 	if (os_mutex_init(&wcb->conn_lock) != 0 || os_mutex_init(&wcb->data_lock) != 0) {
 		WMR_ERROR(wcb, "WMR Controller: Failed to init mutex!");
@@ -743,7 +728,7 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 
 	wcb->timesync_counter = 2;
 	wcb->timesync_led_intensity = 200;
-	wcb->timesync_val2 = 0;
+	wcb->timesync_val2 = 500;
 	wcb->timesync_time_offset = 0;
 
 	wcb->timesync_led_intensity_uvar =
@@ -770,11 +755,6 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	u_var_add_ro_i64(wcb, &wcb->last_tracked_pose_ts, "Last observed pose TS");
 	u_var_add_bool(wcb, &wcb->update_yaw_from_optical, "Update yaw using tracking");
 
-	u_var_add_gui_header(wcb, NULL, "Kalman Fusion");
-	kalman_fusion_add_ui(wcb->kalman_fusion, wcb,
-	                     (wcb->base.device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) ? "wmr_left"
-	                                                                                     : "wmr_right");
-
 	u_var_add_gui_header(wcb, NULL, "LED Sync");
 	u_var_add_draggable_u16(wcb, &wcb->timesync_led_intensity_uvar, "LED intensity");
 	u_var_add_draggable_u16(wcb, &wcb->timesync_val2_uvar, "U2");
@@ -783,6 +763,7 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	u_var_add_ro_u64(wcb, &wcb->last_timesync_device_timestamp_ns, "Last device timesync TS");
 
 	u_var_add_gui_header(wcb, NULL, "Misc");
+	u_var_add_pose(wcb, &wcb->P_aim, "Aim pose offset");
 	u_var_add_pose(wcb, &wcb->P_aim_grip, "Grip pose offset");
 	u_var_add_ro_u64(wcb, &wcb->next_keepalive_timestamp_ns, "Next keepalive TS");
 
@@ -964,6 +945,106 @@ wmr_controller_base_send_keepalive(struct wmr_controller_base *wcb, uint64_t now
 	}
 }
 
+#define WMR_RING_HEIGHT 0.02194146618190565
+#define WMR_RING_TOP_RADIUS (0.11277887330599087 / 2.0)
+#define WMR_RING_BOTTOM_RADIUS (0.09375531956362483 / 2.0)
+
+static bool
+conical_frustum_ray_intersect(struct xrt_vec3 ray_origin,
+                              struct xrt_vec3 ray_dir,
+                              struct xrt_vec3 base_center,
+                              struct xrt_vec3 axis,
+                              float h,
+                              float r1,
+                              float r2,
+                              float *hit_time)
+{
+	// cone has it's base on the bottom, must shrink as it goes up
+	assert(r1 > r2);
+
+	// compute cone slope k = (r1 - r2) / h
+	float k = (r1 - r2) / h;
+	float k2 = k * k;
+
+	// apex of the cone
+	float cone_height = r1 / k;
+	struct xrt_vec3 apex = m_vec3_sub(base_center, m_vec3_mul_scalar(axis, cone_height));
+
+	// vector from apex to ray origin
+	struct xrt_vec3 delta_p = m_vec3_sub(ray_origin, apex);
+
+	// dot products
+	float dv = m_vec3_dot(ray_dir, axis);
+	float pv = m_vec3_dot(delta_p, axis);
+
+	// quadratic coefficients
+	float a = m_vec3_dot(ray_dir, ray_dir) - (1 + k2) * dv * dv;
+	float b = 2 * (m_vec3_dot(ray_dir, delta_p) - (1 + k2) * dv * pv);
+	float c = m_vec3_dot(delta_p, delta_p) - (1 + k2) * pv * pv;
+
+	// discriminant
+	float discriminant = b * b - 4 * a * c;
+	if (discriminant < -1e-6f) // allow some small numerical tolerance
+		return false;
+
+	if (discriminant < 0.0f)
+		discriminant = 0.0f;
+
+	float sqrt_d = sqrtf(discriminant);
+	float t0 = (-b - sqrt_d) / (2 * a);
+	float t1 = (-b + sqrt_d) / (2 * a);
+
+	// pick nearest positive intersection
+	float t = t0 > 0 ? t0 : t1;
+	if (t < 0)
+		return false;
+
+	// intersection point
+	struct xrt_vec3 p = m_vec3_add(ray_origin, m_vec3_mul_scalar(ray_dir, t));
+
+	// project onto cone axis to check vertical bounds
+	float u = m_vec3_dot(m_vec3_sub(p, base_center), axis);
+	if (u < 0 || u > h)
+		return false;
+
+	if (hit_time)
+		*hit_time = t;
+
+	return true;
+}
+
+static bool
+wmr_controller_base_check_led_visibility(struct t_constellation_led_model *led_model,
+                                         size_t led_index,
+                                         struct xrt_vec3 T_obj_cam)
+{
+	// @todo *so much* of this can be pre-computed... but this is fine for now.
+
+	struct t_constellation_led *led = &led_model->leds[led_index];
+
+	struct xrt_vec3 led_dir = led->dir;
+	led_dir.z = 0;
+	math_vec3_normalize(&led_dir);
+
+	struct xrt_vec3 led_dir_to_z_axis = m_vec3_inverse((struct xrt_vec3){led->pos.x, led->pos.y, 0});
+	math_vec3_normalize(&led_dir_to_z_axis);
+
+	float angle_away_from_origin = fabsf(acosf(m_vec3_dot(led_dir_to_z_axis, led_dir)));
+
+	struct xrt_vec3 ring_base_pos = {0, 0, (WMR_RING_HEIGHT / 2.0)};
+	struct xrt_vec3 ring_base_rot = {0, 0, -1};
+
+	// for inward-facing LEDs, check if they intersect with the Cone
+	if (angle_away_from_origin < DEG_TO_RAD(30.0) &&
+	    conical_frustum_ray_intersect(led->pos, m_vec3_normalize(m_vec3_sub(T_obj_cam, led->pos)), ring_base_pos,
+	                                  ring_base_rot, WMR_RING_HEIGHT, WMR_RING_TOP_RADIUS, WMR_RING_BOTTOM_RADIUS,
+	                                  NULL)) {
+		return false;
+	}
+
+	return true;
+}
+
 static bool
 wmr_controller_base_get_led_model(struct xrt_device *xdev, struct t_constellation_led_model *led_model)
 {
@@ -976,7 +1057,8 @@ wmr_controller_base_get_led_model(struct xrt_device *xdev, struct t_constellatio
 	}
 	os_mutex_unlock(&wcb->data_lock);
 
-	t_constellation_led_model_init((int)wcb->base.device_type, NULL, led_model, wcb->config.led_count);
+	t_constellation_led_model_init((int)wcb->base.device_type, NULL, led_model, wcb->config.led_count, 8);
+	led_model->check_led_visibility = wmr_controller_base_check_led_visibility;
 
 	// Note: This LED model is in OpenCV/WMR coordinates with
 	// XYZ = Right/Down/Forward
@@ -985,13 +1067,53 @@ wmr_controller_base_get_led_model(struct xrt_device *xdev, struct t_constellatio
 
 		led->id = i;
 
-		led->pos = wcb->config.leds[i].pos;
-		led->dir = wcb->config.leds[i].norm;
+		struct wmr_led_config *wmr_led = &wcb->config.leds[i];
+		led->pos = wmr_led->pos;
+		led->dir = wmr_led->norm;
 
-		led->radius_mm = 3.5;
+		led->radius_mm = 3;
 	}
 
+	const float controller_height = 0.150; // controller is about 150mm high
+	const float bounding_box_back = -(controller_height - (WMR_RING_HEIGHT / 2.0));
+
+	const float base_radius = 0.070 / 2.0; // the width between the the left and right of the controller's face
+
+	struct xrt_vec3 bounding_points[8] = {
+	    {WMR_RING_TOP_RADIUS, WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2},   // +Z, +X, +Y
+	    {-WMR_RING_TOP_RADIUS, WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2},  // +Z, -X, +Y
+	    {WMR_RING_TOP_RADIUS, -WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2},  // +Z, +X, -Y
+	    {-WMR_RING_TOP_RADIUS, -WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2}, // +Z, -X, -Y
+	    {base_radius, base_radius, bounding_box_back},                     // -Z, +X, +Y
+	    {-base_radius, base_radius, bounding_box_back},                    // -Z, -X, +Y
+	    {base_radius, -base_radius, bounding_box_back},                    // -Z, +X, -Y
+	    {-base_radius, -base_radius, bounding_box_back},                   // -Z, -X, -Y
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(bounding_points); i++) {
+		led_model->bounding_points[i].pos = bounding_points[i];
+	}
+
+	t_constellation_led_model_dump(led_model, wcb->base.str);
+
 	return true;
+}
+
+static void
+wmr_controller_base_push_brightness_update(struct xrt_device *xdev, uint8_t average_brightness)
+{
+	struct wmr_controller_base *wcb = (struct wmr_controller_base *)(xdev);
+	os_mutex_lock(&wcb->data_lock);
+
+	if (average_brightness > 70) {
+		wcb->timesync_led_intensity -= MIN(wcb->timesync_led_intensity, 3);
+	}
+
+	if (average_brightness < 30) {
+		wcb->timesync_led_intensity = MIN(wcb->timesync_led_intensity + 10, 399);
+	}
+
+	os_mutex_unlock(&wcb->data_lock);
 }
 
 static void
@@ -1002,11 +1124,6 @@ wmr_controller_base_push_observed_pose(struct xrt_device *xdev, timepoint_ns fra
 
 	wcb->last_tracked_pose_ts = frame_mono_ns;
 	wcb->last_tracked_pose = *pose;
-
-	struct xrt_pose_sample sample = {.pose = *pose, .timestamp_ns = frame_mono_ns};
-	struct xrt_vec3 position_variance = {1.e-6, 1.e-6, 1.e-6};
-	struct xrt_vec3 orientation_variance = {1.e-3, 1.e-5, 1.e-3};
-	kalman_fusion_process_pose(wcb->kalman_fusion, &sample, &position_variance, &orientation_variance, 15);
 
 	if (wcb->update_yaw_from_optical) {
 #if 1
@@ -1058,6 +1175,7 @@ static struct t_constellation_tracked_device_callbacks tracking_callbacks = {
     .get_led_model = wmr_controller_base_get_led_model,
     .notify_frame_received = wmr_controller_base_notify_frame,
     .push_observed_pose = wmr_controller_base_push_observed_pose,
+    .push_brightness_update = wmr_controller_base_push_brightness_update,
 };
 
 void

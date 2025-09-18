@@ -204,4 +204,14 @@ typedef enum xrt_result
 	 * The input provided is a valid value from the enum xrt_input_name but is not supported by the driver.
 	 */
 	XRT_ERROR_INPUT_UNSUPPORTED = -33,
+
+	/*!
+	 * The output provided is a valid value from the enum xrt_output_name but is not supported by the driver.
+	 */
+	XRT_ERROR_OUTPUT_UNSUPPORTED = -34,
+
+	/*!
+	 * The requested operation failed, verify the log to know more.
+	 */
+	XRT_ERROR_OUTPUT_REQUEST_FAILURE = -35,
 } xrt_result_t;

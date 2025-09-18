@@ -431,34 +431,84 @@ oxr_hand_tracker_create(struct oxr_logger *log,
 	hand_tracker->hand = createInfo->hand;
 	hand_tracker->hand_joint_set = createInfo->handJointSet;
 
-	// Find the assigned device.
-	struct xrt_device *xdev = NULL;
-	if (createInfo->hand == XR_HAND_LEFT_EXT) {
-		xdev = GET_XDEV_BY_ROLE(sess->sys, hand_tracking_left);
-	} else if (createInfo->hand == XR_HAND_RIGHT_EXT) {
-		xdev = GET_XDEV_BY_ROLE(sess->sys, hand_tracking_right);
+#define OXR_SET_HT_DATA_SOURCE(SRC, SRC_TYPE)                                                                          \
+	{                                                                                                              \
+		struct xrt_device *xdev = NULL;                                                                        \
+		if (createInfo->hand == XR_HAND_LEFT_EXT) {                                                            \
+			xdev = GET_XDEV_BY_ROLE(sess->sys, hand_tracking_##SRC##_left);                                \
+		} else if (createInfo->hand == XR_HAND_RIGHT_EXT) {                                                    \
+			xdev = GET_XDEV_BY_ROLE(sess->sys, hand_tracking_##SRC##_right);                               \
+		}                                                                                                      \
+                                                                                                                       \
+		if (xdev != NULL && xdev->supported.hand_tracking) {                                                   \
+			const enum xrt_input_name ht_input_name = createInfo->hand == XR_HAND_LEFT_EXT                 \
+			                                              ? XRT_INPUT_HT_##SRC_TYPE##_LEFT                 \
+			                                              : XRT_INPUT_HT_##SRC_TYPE##_RIGHT;               \
+			struct xrt_input *input = NULL;                                                                \
+			if (oxr_xdev_find_input(xdev, ht_input_name, &input) && input != NULL) {                       \
+				hand_tracker->SRC = (struct oxr_hand_tracking_data_source){                            \
+				    .xdev = xdev,                                                                      \
+				    .input_name = ht_input_name,                                                       \
+				};                                                                                     \
+			}                                                                                              \
+		}                                                                                                      \
+                                                                                                                       \
+		if (xdev != NULL && hand_tracker->SRC.xdev == NULL)                                                    \
+			oxr_warn(log, "We got hand tracking xdev (%s) but it didn't have a hand tracking input.",      \
+			         #SRC);                                                                                \
 	}
 
-	// Find the correct input on the device.
-	if (xdev != NULL && xdev->hand_tracking_supported) {
-		for (uint32_t j = 0; j < xdev->input_count; j++) {
-			struct xrt_input *input = &xdev->inputs[j];
+	// Find the assigned device.
+	OXR_SET_HT_DATA_SOURCE(unobstructed, UNOBSTRUCTED)
+	OXR_SET_HT_DATA_SOURCE(conforming, CONFORMING)
+#undef OXR_SET_HT_DATA_SOURCE
 
-			if ((input->name == XRT_INPUT_GENERIC_HAND_TRACKING_LEFT &&
-			     createInfo->hand == XR_HAND_LEFT_EXT) ||
-			    (input->name == XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT &&
-			     createInfo->hand == XR_HAND_RIGHT_EXT)) {
-				hand_tracker->xdev = xdev;
-				hand_tracker->input_name = input->name;
+	hand_tracker->requested_sources_count = ARRAY_SIZE(hand_tracker->requested_sources);
+	hand_tracker->requested_sources[0] = &hand_tracker->unobstructed;
+	hand_tracker->requested_sources[1] = &hand_tracker->conforming;
+
+#ifdef OXR_HAVE_EXT_hand_tracking_data_source
+	const XrHandTrackingDataSourceInfoEXT *data_source_info = NULL;
+	if (sess->sys->inst->extensions.EXT_hand_tracking_data_source) {
+		data_source_info = OXR_GET_INPUT_FROM_CHAIN(createInfo, XR_TYPE_HAND_TRACKING_DATA_SOURCE_INFO_EXT,
+		                                            XrHandTrackingDataSourceInfoEXT);
+	}
+
+	if (data_source_info != NULL) {
+
+		const uint32_t source_count =
+		    MIN(data_source_info->requestedDataSourceCount, hand_tracker->requested_sources_count);
+		hand_tracker->requested_sources_count = 0;
+		memset(hand_tracker->requested_sources, 0, sizeof(hand_tracker->requested_sources));
+
+		for (uint32_t i = 0; i < source_count; ++i) {
+			struct oxr_hand_tracking_data_source *requested_source = NULL;
+			switch (data_source_info->requestedDataSources[i]) {
+			case XR_HAND_TRACKING_DATA_SOURCE_UNOBSTRUCTED_EXT:
+				requested_source = &hand_tracker->unobstructed;
 				break;
+			case XR_HAND_TRACKING_DATA_SOURCE_CONTROLLER_EXT:
+				requested_source = &hand_tracker->conforming;
+				break;
+			default: break;
+			}
+			if (requested_source && requested_source->xdev != NULL) {
+				hand_tracker->requested_sources[hand_tracker->requested_sources_count++] =
+				    requested_source;
 			}
 		}
-	}
 
-	// Consistency checking.
-	if (xdev != NULL && hand_tracker->xdev == NULL) {
-		oxr_warn(log, "We got hand tracking xdev but it didn't have a hand tracking input.");
+		if (hand_tracker->requested_sources_count == 0) {
+			return oxr_error(
+			    log, XR_ERROR_FEATURE_UNSUPPORTED,
+			    "None of the requested data sources are supported by the current hand-tracking device(s).");
+		}
+
+		const size_t sort_size = hand_tracker->requested_sources_count;
+		const size_t elem_size = sizeof(const struct oxr_hand_tracking_data_source *);
+		qsort(hand_tracker->requested_sources, sort_size, elem_size, oxr_hand_tracking_data_source_cmp);
 	}
+#endif
 
 	*out_hand_tracker = hand_tracker;
 
@@ -486,6 +536,15 @@ oxr_xrCreateHandTrackerEXT(XrSession session,
 	if (createInfo->hand != XR_HAND_LEFT_EXT && createInfo->hand != XR_HAND_RIGHT_EXT) {
 		return oxr_error(&log, XR_ERROR_VALIDATION_FAILURE, "Invalid hand value %d\n", createInfo->hand);
 	}
+
+#ifdef OXR_HAVE_EXT_hand_tracking_data_source
+	const XrHandTrackingDataSourceInfoEXT *data_source_info = NULL;
+	if (sess->sys->inst->extensions.EXT_hand_tracking_data_source) {
+		data_source_info = OXR_GET_INPUT_FROM_CHAIN(createInfo, XR_TYPE_HAND_TRACKING_DATA_SOURCE_INFO_EXT,
+		                                            XrHandTrackingDataSourceInfoEXT);
+	}
+	OXR_VERIFY_HAND_TRACKING_DATA_SOURCE_OR_NULL(&log, data_source_info);
+#endif
 
 	ret = oxr_hand_tracker_create(&log, sess, createInfo, &hand_tracker);
 	if (ret != XR_SUCCESS) {
@@ -557,6 +616,19 @@ oxr_xrLocateHandJointsEXT(XrHandTrackerEXT handTracker,
 			}
 		}
 	}
+
+#ifdef OXR_HAVE_EXT_hand_tracking_data_source
+	const XrHandTrackingDataSourceStateEXT *data_source_state = NULL;
+	if (hand_tracker->sess->sys->inst->extensions.EXT_hand_tracking_data_source) {
+		data_source_state = OXR_GET_OUTPUT_FROM_CHAIN(locations, XR_TYPE_HAND_TRACKING_DATA_SOURCE_STATE_EXT,
+		                                              XrHandTrackingDataSourceStateEXT);
+	}
+
+	if (data_source_state != NULL) {
+		OXR_VERIFY_ARG_TYPE_AND_NOT_NULL(&log, data_source_state, XR_TYPE_HAND_TRACKING_DATA_SOURCE_STATE_EXT);
+		OXR_VERIFY_ARG_NOT_ZERO(&log, hand_tracker->requested_sources_count);
+	}
+#endif
 
 	return oxr_session_hand_joints(&log, hand_tracker, locateInfo, locations);
 }
@@ -826,7 +898,7 @@ oxr_xrCreatePlaneDetectorEXT(XrSession session,
 
 	//! @todo support planes on other devices
 	struct xrt_device *xdev = GET_XDEV_BY_ROLE(sess->sys, head);
-	if (!xdev->planes_supported) {
+	if (!xdev->supported.planes) {
 		return XR_ERROR_FEATURE_UNSUPPORTED;
 	}
 
@@ -885,7 +957,7 @@ oxr_xrBeginPlaneDetectionEXT(XrPlaneDetectorEXT planeDetector, const XrPlaneDete
 		return oxr_error(&log, XR_ERROR_TIME_INVALID, "Time %" PRId64 " invalid", beginInfo->time);
 	}
 
-	if (!pd->xdev->planes_supported) {
+	if (!pd->xdev->supported.planes) {
 		return XR_ERROR_FEATURE_UNSUPPORTED;
 	}
 
@@ -1038,7 +1110,7 @@ oxr_xrGetPlaneDetectionsEXT(XrPlaneDetectorEXT planeDetector,
 		return oxr_error(&log, XR_ERROR_TIME_INVALID, "Time %" PRId64 " invalid", info->time);
 	}
 
-	if (!pd->xdev->planes_supported) {
+	if (!pd->xdev->supported.planes) {
 		return XR_ERROR_FEATURE_UNSUPPORTED;
 	}
 

@@ -8,13 +8,11 @@
  * @ingroup aux_tracking
  */
 
-#include "math/m_eigen_interop.hpp"
 #include "xrt/xrt_tracking.h"
 
 #include "tracking/t_tracking.h"
 #include "tracking/t_calibration_opencv.hpp"
 #include "tracking/t_helper_debug_sink.hpp"
-#include "t_tracker_kalman_fusion.hpp"
 
 #include "util/u_misc.h"
 #include "util/u_debug.h"
@@ -301,7 +299,6 @@ public:
 	uint64_t last_frame;
 
 	Eigen::Vector4f model_center; // center of rotation
-	std::unique_ptr<KalmanFusionInterface> wrapper{KalmanFusionInterface::create()};
 
 #ifdef PSVR_DUMP_FOR_OFFLINE_ANALYSIS
 	FILE *dump_file;
@@ -1878,12 +1875,6 @@ get_pose(TrackerPSVR &t, timepoint_ns when_ns, struct xrt_space_relation *out_re
 		out_relation->relation_flags = (enum xrt_space_relation_flags)(
 		    out_relation->relation_flags | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT);
 	}
-
-	struct xrt_pose_sample sample = {.timestamp_ns = when_ns, .pose = out_relation->pose};
-	t.wrapper->process_pose(&sample, NULL, NULL, 15.0);
-
-	t.wrapper->get_prediction(when_ns, out_relation);
-
 	os_thread_helper_unlock(&t.oth);
 }
 
@@ -1899,14 +1890,6 @@ imu_data(TrackerPSVR &t, timepoint_ns timestamp_ns, struct xrt_tracking_sample *
 	}
 	if (t.last_imu != 0) {
 		// Update 3DOF fusion
-		auto a = sample->accel_m_s2;
-		auto g = sample->gyro_rad_secs;
-		struct xrt_imu_sample sample_ = {
-		    .timestamp_ns = timestamp_ns,
-		    .accel_m_s2 = {a.x, a.y, a.z},
-		    .gyro_rad_secs = {g.x, g.y, g.z},
-		};
-		t.wrapper->process_imu_data(&sample_, NULL, NULL);
 		m_imu_3dof_update(&t.fusion.imu_3dof, timestamp_ns, &sample->accel_m_s2, &sample->gyro_rad_secs);
 	}
 

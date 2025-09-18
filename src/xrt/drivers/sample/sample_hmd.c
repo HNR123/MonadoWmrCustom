@@ -128,7 +128,7 @@ sample_hmd_get_tracked_pose(struct xrt_device *xdev,
 	return XRT_SUCCESS;
 }
 
-static void
+static xrt_result_t
 sample_hmd_get_view_poses(struct xrt_device *xdev,
                           const struct xrt_vec3 *default_eye_relation,
                           int64_t at_timestamp_ns,
@@ -141,14 +141,14 @@ sample_hmd_get_view_poses(struct xrt_device *xdev,
 	 * For HMDs you can call this function or directly set
 	 * the `get_view_poses` function on the device to it.
 	 */
-	u_device_get_view_poses(  //
-	    xdev,                 //
-	    default_eye_relation, //
-	    at_timestamp_ns,      //
-	    view_count,           //
-	    out_head_relation,    //
-	    out_fovs,             //
-	    out_poses);           //
+	return u_device_get_view_poses( //
+	    xdev,                       //
+	    default_eye_relation,       //
+	    at_timestamp_ns,            //
+	    view_count,                 //
+	    out_head_relation,          //
+	    out_fovs,                   //
+	    out_poses);                 //
 }
 
 static xrt_result_t
@@ -195,14 +195,14 @@ sample_hmd_create(void)
 	snprintf(hmd->base.str, XRT_DEVICE_NAME_LEN, "Sample HMD");
 	snprintf(hmd->base.serial, XRT_DEVICE_NAME_LEN, "Sample HMD S/N");
 
-	m_relation_history_create(&hmd->relation_hist, NULL);
+	m_relation_history_create(&hmd->relation_hist);
 
 	// Setup input.
 	hmd->base.name = XRT_DEVICE_GENERIC_HMD;
 	hmd->base.device_type = XRT_DEVICE_TYPE_HMD;
 	hmd->base.inputs[0].name = XRT_INPUT_GENERIC_HEAD_POSE;
-	hmd->base.orientation_tracking_supported = true;
-	hmd->base.position_tracking_supported = true;
+	hmd->base.supported.orientation_tracking = true;
+	hmd->base.supported.position_tracking = true;
 
 	// Set up display details
 	// refresh rate

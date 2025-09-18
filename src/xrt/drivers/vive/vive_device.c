@@ -208,7 +208,7 @@ vive_device_get_tracked_pose(struct xrt_device *xdev,
 	return xret;
 }
 
-static void
+static xrt_result_t
 vive_device_get_view_poses(struct xrt_device *xdev,
                            const struct xrt_vec3 *default_eye_relation,
                            int64_t at_timestamp_ns,
@@ -222,20 +222,25 @@ vive_device_get_view_poses(struct xrt_device *xdev,
 	// Only supports two views.
 	assert(view_count <= 2);
 
-	u_device_get_view_poses(  //
-	    xdev,                 //
-	    default_eye_relation, //
-	    at_timestamp_ns,      //
-	    view_count,           //
-	    out_head_relation,    //
-	    out_fovs,             //
-	    out_poses);           //
+	xrt_result_t xret = u_device_get_view_poses( //
+	    xdev,                                    //
+	    default_eye_relation,                    //
+	    at_timestamp_ns,                         //
+	    view_count,                              //
+	    out_head_relation,                       //
+	    out_fovs,                                //
+	    out_poses);                              //
+	if (xret != XRT_SUCCESS) {
+		return xret;
+	}
 
 	// This is for the Index' canted displays, on the Vive [Pro] they are identity.
 	struct vive_device *d = vive_device(xdev);
 	for (uint32_t i = 0; i < view_count && i < ARRAY_SIZE(d->config.display.rot); i++) {
 		out_poses[i].orientation = d->config.display.rot[i];
 	}
+
+	return XRT_SUCCESS;
 }
 
 static int
@@ -997,9 +1002,9 @@ vive_set_trackers_status(struct vive_device *d, struct vive_tracking_status stat
 	bool hand_supported = status.hand_supported;
 	bool hand_enabled = status.hand_enabled;
 
-	d->base.orientation_tracking_supported = dof3_enabled || slam_enabled;
-	d->base.position_tracking_supported = slam_enabled;
-	d->base.hand_tracking_supported = false; // this is handled by a separate hand device
+	d->base.supported.orientation_tracking = dof3_enabled || slam_enabled;
+	d->base.supported.position_tracking = slam_enabled;
+	d->base.supported.hand_tracking = false; // this is handled by a separate hand device
 	d->base.device_type = XRT_DEVICE_TYPE_HMD;
 
 	d->tracking.slam_enabled = slam_enabled;
@@ -1076,7 +1081,7 @@ vive_device_create(struct os_hid_device *mainboard_dev,
 	    (enum u_device_alloc_flags)(U_DEVICE_ALLOC_HMD | U_DEVICE_ALLOC_TRACKING_NONE);
 	struct vive_device *d = U_DEVICE_ALLOCATE(struct vive_device, flags, 1, 0);
 
-	m_relation_history_create(&d->fusion.relation_hist, NULL);
+	m_relation_history_create(&d->fusion.relation_hist);
 
 	size_t idx = 0;
 	d->base.hmd->blend_modes[idx++] = XRT_BLEND_MODE_OPAQUE;
@@ -1213,7 +1218,7 @@ vive_device_create(struct os_hid_device *mainboard_dev,
 	ret = os_mutex_init(&d->fusion.mutex);
 	if (ret != 0) {
 		VIVE_ERROR(d, "Failed to init 3dof mutex");
-		return false;
+		return NULL;
 	}
 
 	ret = os_thread_helper_start(&d->sensors_thread, vive_sensors_run_thread, d);

@@ -13,6 +13,7 @@
 
 #include "util/u_misc.h"
 #include "util/u_pacing.h"
+#include "util/u_debug.h"
 #include "util/u_pretty_print.h"
 
 #include "vk/vk_surface_info.h"
@@ -29,6 +30,23 @@
  * Vulkan functions.
  *
  */
+
+/*
+ * For all direct mode outputs 2 is what we want since we want to run
+ * lockstep with the display. Most direct mode swapchains only supports
+ * FIFO mode, and since there is no commonly available Vulkan API to
+ * wait for a specific VBLANK event, even just the latest, we can set
+ * the number of images to two and then acquire immediately after
+ * present. Since the old images are being displayed and the new can't
+ * be flipped this will block until the flip has gone through. Crude but
+ * works well enough on both AMD(Mesa) and Nvidia(Blob).
+ *
+ * When not in direct mode and display to a composited window we
+ * probably want 3, but most compositors on Linux sets the minImageCount
+ * to 3 anyways so we get what we want.
+ */
+DEBUG_GET_ONCE_NUM_OPTION(preferred_at_least_image_count, "XRT_COMPOSITOR_PREFERRED_IMAGE_COUNT", 2)
+DEBUG_GET_ONCE_BOOL_OPTION(use_present_wait, "XRT_COMPOSITOR_USE_PRESENT_WAIT", false)
 
 static inline struct vk_bundle *
 get_vk(struct comp_target_swapchain *cts)
@@ -632,6 +650,9 @@ comp_target_swapchain_create_images(struct comp_target *ct, const struct comp_ta
 		u_pc_fake_create(ct->c->frame_interval_ns, now_ns, &cts->upc);
 	}
 
+	// if we have the present wait extension, mark it as supported now
+	ct->wait_for_present_supported = vk->has_KHR_present_wait && debug_get_bool_option_use_present_wait();
+
 	// Free old image views.
 	destroy_image_views(cts);
 
@@ -715,21 +736,7 @@ comp_target_swapchain_create_images(struct comp_target *ct, const struct comp_ta
 		extent.height = w2;
 	}
 
-	/*
-	 * For all direct mode outputs 2 is what we want since we want to run
-	 * lockstep with the display. Most direct mode swapchains only supports
-	 * FIFO mode, and since there is no commonly available Vulkan API to
-	 * wait for a specific VBLANK event, even just the latest, we can set
-	 * the number of images to two and then acquire immediately after
-	 * present. Since the old images are being displayed and the new can't
-	 * be flipped this will block until the flip has gone through. Crude but
-	 * works well enough on both AMD(Mesa) and Nvidia(Blob).
-	 *
-	 * When not in direct mode and display to a composited window we
-	 * probably want 3, but most compositors on Linux sets the minImageCount
-	 * to 3 anyways so we get what we want.
-	 */
-	const uint32_t preferred_at_least_image_count = 2;
+	const uint32_t preferred_at_least_image_count = debug_get_num_option_preferred_at_least_image_count();
 
 	// Get the image count.
 	uint32_t image_count = select_image_count(cts, surface_caps, preferred_at_least_image_count);
@@ -800,6 +807,7 @@ comp_target_swapchain_create_images(struct comp_target *ct, const struct comp_ta
 	cts->base.width = extent.width;
 	cts->base.height = extent.height;
 	cts->base.format = cts->surface.format.format;
+	cts->base.final_layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	cts->base.surface_transform = surface_caps.currentTransform;
 
 	create_image_views(cts);
@@ -869,9 +877,20 @@ comp_target_swapchain_present(struct comp_target *ct,
 	struct comp_target_swapchain *cts = (struct comp_target_swapchain *)ct;
 	struct vk_bundle *vk = get_vk(cts);
 
-	assert(cts->current_frame_id >= 0);
+	assert(cts->current_frame_id > 0);
 	assert(cts->current_frame_id <= UINT32_MAX);
 
+	VkPresentInfoKHR present_info = {
+	    .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+	    .pNext = NULL,
+	    .waitSemaphoreCount = 1,
+	    .pWaitSemaphores = &cts->base.semaphores.render_complete,
+	    .swapchainCount = 1,
+	    .pSwapchains = &cts->swapchain.handle,
+	    .pImageIndices = &index,
+	};
+
+#ifdef VK_GOOGLE_display_timing
 	VkPresentTimeGOOGLE times = {
 	    .presentID = (uint32_t)cts->current_frame_id,
 	    .desiredPresentTime = desired_present_time_ns - present_slop_ns,
@@ -883,20 +902,29 @@ comp_target_swapchain_present(struct comp_target *ct,
 	    .pTimes = &times,
 	};
 
-	VkPresentInfoKHR presentInfo = {
-	    .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-	    .pNext = vk->has_GOOGLE_display_timing ? &timings : NULL,
-	    .waitSemaphoreCount = 1,
-	    .pWaitSemaphores = &cts->base.semaphores.render_complete,
+	if (vk->has_GOOGLE_display_timing) {
+		vk_append_to_pnext_chain((VkBaseInStructure *)&present_info, (VkBaseInStructure *)&timings);
+	}
+#endif
+
+#ifdef VK_KHR_present_id
+	uint64_t present_id = (uint64_t)cts->current_frame_id;
+
+	VkPresentIdKHR vk_present_id = {
+	    .sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR,
 	    .swapchainCount = 1,
-	    .pSwapchains = &cts->swapchain.handle,
-	    .pImageIndices = &index,
+	    .pPresentIds = &present_id,
 	};
+
+	if (vk->features.present_wait) {
+		vk_append_to_pnext_chain((VkBaseInStructure *)&present_info, (VkBaseInStructure *)&vk_present_id);
+	}
+#endif
 
 
 	// Need to take the queue lock for present.
 	os_mutex_lock(&vk->queue_mutex);
-	VkResult ret = vk->vkQueuePresentKHR(queue, &presentInfo);
+	VkResult ret = vk->vkQueuePresentKHR(queue, &present_info);
 	os_mutex_unlock(&vk->queue_mutex);
 
 
@@ -912,6 +940,24 @@ comp_target_swapchain_present(struct comp_target *ct,
 #endif
 
 	return ret;
+}
+
+static VkResult
+comp_target_swapchain_wait_for_present(struct comp_target *ct, time_duration_ns timeout_ns)
+{
+	struct comp_target_swapchain *cts = (struct comp_target_swapchain *)ct;
+	struct vk_bundle *vk = get_vk(cts);
+
+#ifdef VK_KHR_present_wait
+	if (!vk->features.present_wait) {
+		return VK_ERROR_EXTENSION_NOT_PRESENT;
+	}
+
+	// @note current frame ID is incremented by 1 to match the ID given to Vulkan, see comp_target_swapchain_present
+	return vk->vkWaitForPresentKHR(vk->device, cts->swapchain.handle, (uint64_t)cts->current_frame_id, timeout_ns);
+#else
+	return VK_ERROR_EXTENSION_NOT_PRESENT;
+#endif
 }
 
 static bool
@@ -1087,9 +1133,11 @@ comp_target_swapchain_init_and_set_fnptrs(struct comp_target_swapchain *cts,
 	cts->base.has_images = comp_target_swapchain_has_images;
 	cts->base.acquire = comp_target_swapchain_acquire_next_image;
 	cts->base.present = comp_target_swapchain_present;
+	cts->base.wait_for_present = comp_target_swapchain_wait_for_present;
 	cts->base.calc_frame_pacing = comp_target_swapchain_calc_frame_pacing;
 	cts->base.mark_timing_point = comp_target_swapchain_mark_timing_point;
 	cts->base.update_timings = comp_target_swapchain_update_timings;
 	cts->base.info_gpu = comp_target_swapchain_info_gpu;
+
 	os_thread_helper_init(&cts->vblank.event_thread);
 }
