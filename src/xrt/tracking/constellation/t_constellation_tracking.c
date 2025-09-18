@@ -375,19 +375,31 @@ submit_device_pose(struct t_constellation_tracker *ct,
 	         refine_pose.position.z);
 
 	if (num_inliers >= 6) {
-		float pos_diff = math_vec3_len(&refine_pose.position, &P_cam_obj->position);
-		float rot_diff = math_quat_angle_between(&refine_pose.orientation, &P_cam_obj->orientation);
+		// --- Positionsdifferenz berechnen ---
+		struct xrt_vec3 diff;
+		math_vec3_subtract(&refine_pose.position, &P_cam_obj->position);
+		diff = refine_pose.position; // diff = refine - current
+		float pos_diff = sqrtf(diff.x*diff.x + diff.y*diff.y + diff.z*diff.z);
+
+		// --- Orientierung: einfacher Winkel zwischen Quats (approx) ---
+		float dot = P_cam_obj->orientation.x * refine_pose.orientation.x +
+		            P_cam_obj->orientation.y * refine_pose.orientation.y +
+		            P_cam_obj->orientation.z * refine_pose.orientation.z +
+		            P_cam_obj->orientation.w * refine_pose.orientation.w;
+		if (dot < 0) dot = -dot;
+		float rot_diff = acosf(dot) * 2.0f; // grobe Winkelabschätzung
 
 		if (pos_diff < 0.05f && rot_diff < (10.0f * (M_PI/180.0f))) {
-			float alpha = 0.2f;
+			float alpha = 0.2f; // Glättung
 
+			// Position
 			struct xrt_vec3 new_pos = P_cam_obj->position;
-			struct xrt_vec3 delta = refine_pose.position;
-			math_vec3_subtract(&delta, &new_pos);
-			math_vec3_scalar_mul(alpha, &delta);
-			math_vec3_accum(&delta, &new_pos);
+			math_vec3_subtract(&refine_pose.position, &new_pos); // delta = refine - old
+			math_vec3_scalar_mul(alpha, &refine_pose.position);
+			math_vec3_accum(&refine_pose.position, &new_pos);
 			P_cam_obj->position = new_pos;
 
+			// Orientierung (slerp)
 			struct xrt_quat blended;
 			math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, alpha, &blended);
 			P_cam_obj->orientation = blended;
