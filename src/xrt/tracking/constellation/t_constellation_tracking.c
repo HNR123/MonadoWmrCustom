@@ -373,8 +373,50 @@ submit_device_pose(struct t_constellation_tracker *ct,
 		         refine_pose.orientation.x, refine_pose.orientation.y, refine_pose.orientation.z,
 		         refine_pose.orientation.w, refine_pose.position.x, refine_pose.position.y,
 		         refine_pose.position.z);
-		*P_cam_obj = refine_pose;
+
+		float min_beta = 0.10f;
+		float max_beta = 0.90f;
+		float beta = min_beta;
+
+		if (num_leds_out > 0) {
+			float ratio = (float)num_inliers / (float)num_leds_out;
+			/* Clamp ratio 0..1 */
+			if (ratio < 0.0f) {
+				ratio = 0.0f;
+			} else if (ratio > 1.0f) {
+				ratio = 1.0f;
+			}
+			/* Scale into [min_beta, max_beta] */
+			beta = min_beta + (max_beta - min_beta) * ratio;
+		}
+
+		CT_DEBUG(ct, "RANSAC blend beta=%f (inliers=%d out=%d)", beta, num_inliers, num_leds_out);
+
+		/* Position: linear blend */
+		struct xrt_vec3 blended_pos = P_cam_obj->position;
+		math_vec3_scalar_mul(1.0f - beta, &blended_pos); // blended_pos *= (1-beta)
+
+		struct xrt_vec3 ref_pos = refine_pose.position;
+		math_vec3_scalar_mul(beta, &ref_pos); // ref_pos *= beta
+
+		/* blended_pos += ref_pos */
+		math_vec3_accum(&ref_pos, &blended_pos); // blended_pos = blended_pos + ref_pos
+
+		P_cam_obj->position = blended_pos;
+
+		/* Orientation: slerp from original to refined by beta */
+		math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, beta, &P_cam_obj->orientation);
 	}
+	//else {
+	//	CT_DEBUG(ct,
+	//	         "Camera %d RANSAC-PnP refinement for device %d from %u blobs had %d LEDs with %d inliers. "
+	//	         "Produced pose %f,%f,%f,%f pos %f,%f,%f",
+	//	         view_id, device->led_model.id, view->bwobs->num_blobs, num_leds_out, num_inliers,
+	//	         refine_pose.orientation.x, refine_pose.orientation.y, refine_pose.orientation.z,
+	//	         refine_pose.orientation.w, refine_pose.position.x, refine_pose.position.y,
+	//	         refine_pose.position.z);
+	//	*P_cam_obj = refine_pose;
+	//}
 
 	os_mutex_lock(&cam->bw_lock);
 	blobwatch_update_labels(cam->bw, view->bwobs, device->led_model.id);
