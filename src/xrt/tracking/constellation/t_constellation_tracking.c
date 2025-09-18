@@ -375,27 +375,6 @@ submit_device_pose(struct t_constellation_tracker *ct,
 	         refine_pose.position.z);
 
 	if (num_inliers >= 6) {
-		// maximale erlaubte Positionsabweichung (Meter)
-		const float max_pos_jump = 0.05f;
-
-		// maximale erlaubte Rotationsabweichung (Winkel in Radiant)
-		const float max_rot_jump = 30.0f * (M_PI / 180.0f);
-
-		// Positionsdifferenz
-		float dx = refine_pose.position.x - P_cam_obj->position.x;
-		float dy = refine_pose.position.y - P_cam_obj->position.y;
-		float dz = refine_pose.position.z - P_cam_obj->position.z;
-		float pos_diff = sqrtf(dx*dx + dy*dy + dz*dz);
-
-		// grober Winkelunterschied (dot product)
-		float dot = P_cam_obj->orientation.x * refine_pose.orientation.x +
-		P_cam_obj->orientation.y * refine_pose.orientation.y +
-		P_cam_obj->orientation.z * refine_pose.orientation.z +
-		P_cam_obj->orientation.w * refine_pose.orientation.w;
-		if (dot < 0) dot = -dot; // kürzeste Rotation
-		float rot_diff = acosf(dot) * 2.0f;
-
-		// Nur übernehmen, wenn nicht zu groß
 		if (pos_diff < max_pos_jump && rot_diff < max_rot_jump) {
 			float alpha = 0.2f;
 			// Position glätten
@@ -409,6 +388,33 @@ submit_device_pose(struct t_constellation_tracker *ct,
 		}
 
 	}
+
+
+		// maximale erlaubte Positionsabweichung (Meter)
+		// const float max_pos_jump = 0.1f;
+  //
+		// // maximale erlaubte Rotationsabweichung (Winkel in Radiant)
+		// const float max_rot_jump = 30.0f * (M_PI / 180.0f);
+  //
+		// // Positionsdifferenz
+		// float dx = refine_pose.position.x - P_cam_obj->position.x;
+		// float dy = refine_pose.position.y - P_cam_obj->position.y;
+		// float dz = refine_pose.position.z - P_cam_obj->position.z;
+		// float pos_diff = sqrtf(dx*dx + dy*dy + dz*dz);
+  //
+		// // grober Winkelunterschied (dot product)
+		// float dot = P_cam_obj->orientation.x * refine_pose.orientation.x +
+		// P_cam_obj->orientation.y * refine_pose.orientation.y +
+		// P_cam_obj->orientation.z * refine_pose.orientation.z +
+		// P_cam_obj->orientation.w * refine_pose.orientation.w;
+		// if (dot < 0) dot = -dot; // kürzeste Rotation
+		// float rot_diff = acosf(dot) * 2.0f;
+
+		// Nur übernehmen, wenn nicht zu groß
+
+		//}
+
+	//}
 	/*else {
 		CT_DEBUG(ct,
 		         "Camera %d RANSAC-PnP refinement for device %d from %u blobs had %d LEDs with %d inliers. "
