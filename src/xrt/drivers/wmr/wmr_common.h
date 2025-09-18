@@ -19,6 +19,9 @@
 extern "C" {
 #endif
 
+/* public type structs forward declarations */
+struct wmr_hmd;
+struct wmr_controller_base;
 
 /*!
  * Headset type, used to select different control and init/shutdown procedures.
@@ -38,6 +41,7 @@ enum wmr_headset_type
 	WMR_HEADSET_DELL_VISOR,
 	WMR_HEADSET_ACER_AH100,
 	WMR_HEADSET_ACER_AH101,
+	WMR_HEADSET_FUJITSU_FMVHDS1,
 };
 
 /*!
@@ -80,6 +84,9 @@ enum wmr_headset_type
 #define ACER_VID 0x0502
 #define AH100_PID 0xb0d5
 #define AH101_PID 0xb0d6
+
+#define FUJITSU_VID 0x04c5
+#define FMVHDS1_PID 0x15b9
 
 /*!
  * @}

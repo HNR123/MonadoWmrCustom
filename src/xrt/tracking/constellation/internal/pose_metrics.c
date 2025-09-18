@@ -232,7 +232,7 @@ get_visible_leds_and_bounds(struct xrt_pose *pose,
 		}
 
 		if (led_model->check_led_visibility &&
-		    !led_model->check_led_visibility(led_model, i, P_obj_cam.position)) {
+		    !led_model->check_led_visibility(led_model->xdev, led_model, i, P_obj_cam.position)) {
 			continue;
 		}
 

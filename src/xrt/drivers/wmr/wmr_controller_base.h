@@ -15,12 +15,18 @@
 #pragma once
 
 #include "os/os_threading.h"
+#include "math/m_clock_tracking.h"
 #include "math/m_imu_3dof.h"
 #include "util/u_logging.h"
+#include "util/u_var.h"
 #include "xrt/xrt_device.h"
+#include "tracking/t_led_models.h"
+#include "tracking/t_constellation_tracking.h"
 
+#include "wmr_common.h"
 #include "wmr_controller_protocol.h"
 #include "wmr_config.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,6 +88,14 @@ wmr_controller_connection_disconnect(struct wmr_controller_connection *wcc)
 	wcc->disconnect(wcc);
 }
 
+struct wmr_controller_base_imu_sample
+{
+	uint32_t timestamp_ticks;
+	struct xrt_vec3 acc;
+	struct xrt_vec3 gyro;
+	int32_t temperature;
+};
+
 /*!
  * Common base for all WMR controllers.
  *
@@ -104,6 +118,9 @@ struct wmr_controller_base
 
 	enum u_logging_level log_level;
 
+	//! Controller tracker connection that is doing 6dof tracking of this controller
+	struct t_constellation_tracked_device_connection *tracking_connection;
+
 	//! Mutex protects shared data used from OpenXR callbacks
 	struct os_mutex data_lock;
 
@@ -115,10 +132,68 @@ struct wmr_controller_base
 	                            uint32_t buf_size);
 
 	/* firmware configuration block */
+	bool have_config;
 	struct wmr_controller_config config;
+
+	//! Offset for aim pose (set by subclasses. adjustable in debug)
+	struct xrt_pose P_aim;
+
+	//! Offset for grip pose relative to aim (set by subclasses. adjustable in debug)
+	struct xrt_pose P_aim_grip;
+
+	//! Thumbstick deadzone setting. Applied / used by subclasses
+	float thumbstick_deadzone;
+
+	//! Last ticks counter from input, extended to 64-bits
+	uint64_t last_timestamp_ticks;
+
+	//! Newest reported tracked pose
+	struct xrt_pose pose;
 
 	//! Time of last IMU sample, in CPU time.
 	uint64_t last_imu_timestamp_ns;
+	//! Time of last IMU sample, in device time.
+	uint64_t last_imu_device_timestamp_ns;
+	//!< Min-Skew estimator for IMU to monotonic clock. Protected by data_lock
+	struct m_clock_windowed_skew_tracker *hw2mono_clock;
+	//!< Last IMU sample received
+	struct wmr_controller_base_imu_sample last_imu;
+
+	//!< Last frame timestamp in CPU mono ts notified from the tracker
+	uint64_t last_frame_timestamp;
+	//!< Last frame sequence number notified from the tracker
+	uint64_t last_frame_sequence;
+
+	//! Last timestamp of tracked pose from optical controller tracking
+	timepoint_ns last_tracked_pose_ts;
+	//! Last tracked pose from optical controller tracking
+	struct xrt_pose last_tracked_pose;
+	//! debug boolean - enable yaw updates
+	bool update_yaw_from_optical;
+
+	//!< Command counter for timesync and keep-alives. conn_lock
+	uint8_t cmd_counter;
+	//!< Next (local mono) time to send keepalive. conn_lock
+	uint64_t next_keepalive_timestamp_ns;
+	//!< Last timesync counter. 0, 1 or 2 then loops. Starts @ 1. conn_lock
+	uint8_t timesync_counter;
+	//!< Variable in the timesync packet. valid values: 1..399.
+	uint16_t timesync_led_intensity;
+	//!< Variable in the timesync packet. valid values: 0..1023
+	uint16_t timesync_val2;
+	uint64_t timesync_device_slam_time_us;
+	uint16_t timesync_time_offset;
+	bool timesync_updated;
+
+	//! Time of last timesync SLAM frame estimate, in CPU time.
+	uint64_t last_timesync_timestamp_ns;
+	//! Time of last timesync SLAM frame estimate, in device time.
+	uint64_t last_timesync_device_timestamp_ns;
+
+	struct u_var_draggable_u16 timesync_led_intensity_uvar;
+	struct u_var_draggable_u16 timesync_val2_uvar;
+	struct u_var_draggable_u16 timesync_time_offset_uvar;
+
 	//! Main fusion calculator.
 	struct m_imu_3dof fusion;
 	//! The last angular velocity from the IMU, for prediction.
@@ -133,6 +208,11 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 
 void
 wmr_controller_base_deinit(struct wmr_controller_base *wcb);
+
+void
+wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
+                               struct wmr_controller_base_imu_sample *imu,
+                               timepoint_ns rx_mono_ns);
 
 static inline void
 wmr_controller_connection_receive_bytes(struct wmr_controller_connection *wcc,
@@ -150,6 +230,19 @@ wmr_controller_connection_receive_bytes(struct wmr_controller_connection *wcc,
 		wcb->receive_bytes(wcb, time_ns, buffer, buf_size);
 	}
 }
+
+static inline struct xrt_device *
+wmr_controller_base_to_xrt_device(struct wmr_controller_base *wcb)
+{
+	if (wcb != NULL) {
+		return &wcb->base;
+	}
+	return NULL;
+}
+
+/* Tell the controller which HMD to register with for tracking */
+void
+wmr_controller_attach_to_hmd(struct wmr_controller_base *wcb, struct wmr_hmd *hmd);
 
 #ifdef __cplusplus
 }

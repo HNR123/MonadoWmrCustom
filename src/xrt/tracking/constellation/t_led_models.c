@@ -16,12 +16,14 @@
 #endif
 
 void
-t_constellation_led_model_init(uint8_t device_id,
+t_constellation_led_model_init(struct xrt_device *xdev,
+                               uint8_t device_id,
                                struct xrt_pose *P_device_model,
                                struct t_constellation_led_model *led_model,
                                uint8_t num_leds,
                                uint8_t num_bounding_points)
 {
+	led_model->xdev = xdev;
 	led_model->id = device_id;
 	if (P_device_model != NULL) {
 		led_model->P_device_model = *P_device_model;

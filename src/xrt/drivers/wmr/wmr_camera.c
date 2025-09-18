@@ -124,7 +124,8 @@ struct wmr_camera
 
 	struct u_sink_debug debug_sinks[2];
 
-	struct xrt_frame_sink *cam_sinks[WMR_MAX_CAMERAS]; //!< Downstream sinks to push tracking frames to
+	struct xrt_frame_sink *slam_cam_sinks[WMR_MAX_CAMERAS]; //!< Downstream sinks to push SLAM tracking frames to
+	struct xrt_frame_sink *controller_cam_sink; //!< Downstream sink to push controller tracking frames to
 
 	enum u_logging_level log_level;
 };
@@ -395,7 +396,14 @@ img_xfer_cb(struct libusb_transfer *xfer)
 	              cam->frame_sequence, exposure);
 
 	xf->source_sequence = cam->frame_sequence;
-	xf->timestamp = frame_start_ts + delta / 2;
+	/* Pass a mid-point timestamp for SLAM (why?). Pass
+	 * the start timestamp for the controller tracking though,
+	 * as those frames have really short exposures */
+	if (slam_tracking_frame) {
+		xf->timestamp = frame_start_ts + delta / 2;
+	} else {
+		xf->timestamp = frame_start_ts;
+	}
 	xf->source_timestamp = frame_start_ts;
 
 	cam->last_frame_ts = frame_start_ts;
@@ -420,12 +428,15 @@ img_xfer_cb(struct libusb_transfer *xfer)
 		update_expgain(cam, frames);
 
 		for (int i = 0; i < cam->slam_cam_count; i++) {
-			xrt_sink_push_frame(cam->cam_sinks[i], frames[i]);
+			xrt_sink_push_frame(cam->slam_cam_sinks[i], frames[i]);
 		}
 
 		for (int i = 0; i < cam->slam_cam_count; i++) {
 			xrt_frame_reference(&frames[i], NULL);
 		}
+	} else if (cam->controller_cam_sink != NULL) {
+		/* @todo: Build a frame bundle and push that instead */
+		xrt_sink_push_frame(cam->controller_cam_sink, xf);
 	}
 
 drop_frame:
@@ -457,8 +468,10 @@ wmr_camera_open(struct wmr_camera_open_config *config)
 
 	for (int i = 0; i < cam->tcam_count; i++) {
 		cam->tcam_confs[i] = *config->tcam_confs[i];
-		cam->cam_sinks[i] = config->tcam_sinks[i];
+		cam->slam_cam_sinks[i] = config->tcam_sinks[i];
 	}
+
+	cam->controller_cam_sink = config->controller_cam_sink;
 
 	if (os_thread_helper_init(&cam->usb_thread) != 0) {
 		WMR_CAM_ERROR(cam, "Failed to initialise threading");

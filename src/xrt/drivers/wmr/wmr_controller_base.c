@@ -14,9 +14,12 @@
 
 #include "math/m_mathinclude.h"
 #include "math/m_api.h"
-#include "math/m_clock_tracking.h"
 #include "math/m_vec2.h"
+#include "math/m_vec3.h"
 #include "math/m_predict.h"
+#include "math/m_space.h"
+
+#include "tracking/t_constellation_tracking.h"
 
 #include "util/u_file.h"
 #include "util/u_var.h"
@@ -29,6 +32,7 @@
 #include "wmr_common.h"
 #include "wmr_controller_base.h"
 #include "wmr_config_key.h"
+#include "wmr_hmd.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -36,6 +40,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <inttypes.h>
 
 #define WMR_TRACE(wcb, ...) U_LOG_XDEV_IFL_T(&wcb->base, wcb->log_level, __VA_ARGS__)
 #define WMR_TRACE_HEX(wcb, ...) U_LOG_XDEV_IFL_T_HEX(&wcb->base, wcb->log_level, __VA_ARGS__)
@@ -58,6 +63,69 @@ wmr_controller_base(struct xrt_device *p)
 	return (struct wmr_controller_base *)p;
 }
 
+/* Called from subclasses' handle_input_packet method, with data_lock */
+void
+wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
+                               struct wmr_controller_base_imu_sample *imu_sample,
+                               timepoint_ns rx_mono_ns)
+{
+	/* Extend 32-bit tick count to 64-bit and convert to ns */
+	uint32_t tick_delta = imu_sample->timestamp_ticks - (uint32_t)wcb->last_timestamp_ticks;
+	wcb->last_timestamp_ticks += tick_delta;
+
+	timepoint_ns now_hw_ns = wcb->last_timestamp_ticks * WMR_MOTION_CONTROLLER_NS_PER_TICK;
+
+	/* Update windowed min-skew estimator and convert hardware timestamp into monotonic clock */
+	m_clock_windowed_skew_tracker_push(wcb->hw2mono_clock, rx_mono_ns, now_hw_ns);
+
+	timepoint_ns mono_time_ns;
+	if (!m_clock_windowed_skew_tracker_to_local(wcb->hw2mono_clock, now_hw_ns, &mono_time_ns)) {
+		WMR_DEBUG(wcb,
+		          "Dropping IMU sample until clock estimator synchronises. Rcv ts %" PRIu64 " hw ts %" PRIu64,
+		          rx_mono_ns, now_hw_ns);
+		return;
+	}
+
+	/*
+	 * Check if the timepoint does time travel, we get one or two
+	 * old samples when the device has not been cleanly shut down,
+	 * and if the controller is left idle and goes into low power
+	 * mode it can come back with a different clock epoch
+	 */
+	if (wcb->last_imu_timestamp_ns > (uint64_t)mono_time_ns) {
+		WMR_WARN(wcb,
+		         "Received sample from the past, new: %" PRIu64 ", last: %" PRIu64 ", diff: %" PRIu64
+		         ". resetting clock tracking",
+		         mono_time_ns, now_hw_ns, mono_time_ns - now_hw_ns);
+		// Reinit. The 3dof fusion will assert if time goes backward
+		wcb->last_imu_timestamp_ns = 0;
+		wcb->last_imu_device_timestamp_ns = 0;
+		m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
+		m_clock_windowed_skew_tracker_reset(wcb->hw2mono_clock);
+		m_clock_windowed_skew_tracker_push(wcb->hw2mono_clock, rx_mono_ns, now_hw_ns);
+		return;
+	}
+
+	float accel_m_p_s_2 = m_vec3_len(imu_sample->acc);
+	WMR_TRACE(wcb, "Accel [m/s^2] : %f", accel_m_p_s_2);
+
+	// if it accelerates quite quickly, then we up the brightness to make it easier to find constellation poses
+	if (accel_m_p_s_2 > 20) {
+		wcb->timesync_led_intensity = MIN(wcb->timesync_led_intensity + 10, 399);
+	}
+
+	m_imu_3dof_update(&wcb->fusion, mono_time_ns, &imu_sample->acc, &imu_sample->gyro);
+	wcb->last_imu_timestamp_ns = mono_time_ns;
+	wcb->last_imu_device_timestamp_ns = now_hw_ns;
+	wcb->last_angular_velocity = imu_sample->gyro;
+	wcb->last_imu = *imu_sample;
+}
+
+static void
+wmr_controller_base_send_timesync(struct wmr_controller_base *wcb);
+static void
+wmr_controller_base_send_keepalive(struct wmr_controller_base *wcb, uint64_t time_ns);
+
 static void
 receive_bytes(struct wmr_controller_base *wcb, uint64_t time_ns, uint8_t *buffer, uint32_t buf_size)
 {
@@ -69,6 +137,14 @@ receive_bytes(struct wmr_controller_base *wcb, uint64_t time_ns, uint8_t *buffer
 	switch (buffer[0]) {
 	case WMR_MOTION_CONTROLLER_STATUS_MSG:
 		os_mutex_lock(&wcb->data_lock);
+		// Send a timesync packet if needed
+		if (wcb->timesync_updated) {
+			wmr_controller_base_send_timesync(wcb);
+			wcb->timesync_updated = false;
+		}
+
+		wmr_controller_base_send_keepalive(wcb, time_ns);
+
 		// Note: skipping msg type byte
 		bool b = wcb->handle_input_packet(wcb, time_ns, &buffer[1], (size_t)buf_size - 1);
 		os_mutex_unlock(&wcb->data_lock);
@@ -439,7 +515,6 @@ read_controller_config(struct wmr_controller_base *wcb)
 	free(cache_filename);
 
 	WMR_DEBUG(wcb, "Parsed %d LED entries from controller calibration", wcb->config.led_count);
-
 	return true;
 }
 
@@ -453,20 +528,31 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 
 	struct wmr_controller_base *wcb = wmr_controller_base(xdev);
 
-	// Variables needed for prediction.
-	int64_t last_imu_timestamp_ns = 0;
-	struct xrt_space_relation relation = {0};
-	relation.relation_flags = (enum xrt_space_relation_flags)(
-	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
-	    XRT_SPACE_RELATION_ANGULAR_VELOCITY_VALID_BIT | XRT_SPACE_RELATION_LINEAR_VELOCITY_VALID_BIT);
+	struct xrt_relation_chain xrc = {0};
 
+	m_relation_chain_push_pose(&xrc, &wcb->P_aim);
+	if (name == XRT_INPUT_G2_CONTROLLER_GRIP_POSE || name == XRT_INPUT_ODYSSEY_CONTROLLER_GRIP_POSE ||
+	    name == XRT_INPUT_WMR_GRIP_POSE) {
+		m_relation_chain_push_pose(&xrc, &wcb->P_aim_grip);
+	}
 
+	/* Apply the controller rotation */
 	struct xrt_pose pose = {{0, 0, 0, 1}, {0, 1.2, -0.5}};
 	if (xdev->device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
 		pose.position.x = -0.2;
 	} else {
 		pose.position.x = 0.2;
 	}
+
+	// Variables needed for prediction.
+	int64_t last_imu_timestamp_ns = 0;
+	struct xrt_space_relation relation = {0};
+	relation.relation_flags = (enum xrt_space_relation_flags)(
+	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
+	    XRT_SPACE_RELATION_POSITION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT |
+	    XRT_SPACE_RELATION_ANGULAR_VELOCITY_VALID_BIT | XRT_SPACE_RELATION_LINEAR_VELOCITY_VALID_BIT);
+
+	// Start with the static pose above, then apply IMU + tracking
 	relation.pose = pose;
 
 	// Copy data while holding the lock.
@@ -474,7 +560,14 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	relation.pose.orientation = wcb->fusion.rot;
 	relation.angular_velocity = wcb->last_angular_velocity;
 	last_imu_timestamp_ns = wcb->last_imu_timestamp_ns;
+
+	if (wcb->last_tracked_pose_ts != 0) {
+		relation.pose.position = wcb->last_tracked_pose.position;
+	}
 	os_mutex_unlock(&wcb->data_lock);
+
+	m_relation_chain_push_relation(&xrc, &relation);
+	m_relation_chain_resolve(&xrc, &relation);
 
 	// No prediction needed.
 	if (at_timestamp_ns < last_imu_timestamp_ns) {
@@ -486,6 +579,7 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	double prediction_s = time_ns_to_s(prediction_ns);
 
 	m_predict_relation(&relation, prediction_s, out_relation);
+	wcb->pose = out_relation->pose;
 
 	return XRT_SUCCESS;
 }
@@ -508,6 +602,13 @@ wmr_controller_base_deinit(struct wmr_controller_base *wcb)
 	if (conn != NULL) {
 		wmr_controller_connection_disconnect(conn);
 	}
+
+	if (wcb->tracking_connection) {
+		t_constellation_tracked_device_connection_disconnect(wcb->tracking_connection);
+		wcb->tracking_connection = NULL;
+	}
+
+	m_clock_windowed_skew_tracker_destroy(wcb->hw2mono_clock);
 
 	os_mutex_destroy(&wcb->conn_lock);
 	os_mutex_destroy(&wcb->data_lock);
@@ -533,6 +634,12 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	wcb->log_level = log_level;
 	wcb->wcc = conn;
 	wcb->receive_bytes = receive_bytes;
+	wcb->pose = (struct xrt_pose)XRT_POSE_IDENTITY;
+
+	// IMU samples arrive every 5ms on average
+	// 1 second seems to be enough to smooth things
+	const int IMU_ARRIVAL_FREQ = 200;
+	wcb->hw2mono_clock = m_clock_windowed_skew_tracker_alloc(IMU_ARRIVAL_FREQ);
 
 	if (controller_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
 		snprintf(wcb->base.str, ARRAY_SIZE(wcb->base.str), "WMR Left Controller");
@@ -549,8 +656,23 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	wcb->base.name = XRT_DEVICE_WMR_CONTROLLER;
 	wcb->base.device_type = controller_type;
 	wcb->base.supported.orientation_tracking = true;
-	wcb->base.supported.position_tracking = false;
+	wcb->base.supported.position_tracking = true;
 	wcb->base.supported.hand_tracking = false;
+
+	/* Default grip pose up by 35° degrees around the X axis and
+	 * back about 10cm (back is +Z in OXR coords), but overridden
+	 * by subclasses with real values from controller models */
+	struct xrt_vec3 translation = {0.0, 0, 0.1};
+	struct xrt_vec3 axis = {1.0, 0, 0};
+	math_quat_from_angle_vector(DEG_TO_RAD(35), &axis, &wcb->P_aim_grip.orientation);
+	wcb->P_aim_grip.position = translation;
+
+	struct xrt_vec3 aim_translation = {-0.014322, 0.018838, 0};
+	wcb->P_aim.position = aim_translation;
+	struct xrt_vec3 aim_axis = {0.0, 1.0, 0};
+	math_quat_from_angle_vector(DEG_TO_RAD(12.5), &aim_axis, &wcb->P_aim.orientation);
+
+	wcb->thumbstick_deadzone = 0.15;
 
 	m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 
@@ -558,8 +680,6 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 		WMR_ERROR(wcb, "WMR Controller: Failed to init mutex!");
 		return false;
 	}
-
-	u_var_add_root(wcb, wcb->base.str, true);
 
 	/* Send init commands */
 	struct wmr_controller_fw_cmd fw_cmd = {
@@ -586,11 +706,481 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 
 	wmr_config_precompute_transforms(&wcb->config.sensors, NULL);
 
+	// Announce the availabilty of the config for the tracker to retrieve
+	os_mutex_lock(&wcb->data_lock);
+	wcb->have_config = true;
+	os_mutex_unlock(&wcb->data_lock);
+
+	/* Reset device time before controller outputs */
+	fw_cmd = WMR_CONTROLLER_FW_CMD_INIT(0x06, 0x21, 0x00, 0x00);
+	if (wmr_controller_send_fw_cmd(wcb, &fw_cmd, 0x06, &fw_cmd_response) < 0) {
+		return false;
+	}
+
 	/* Enable the status reports, IMU and control status reports */
 	const unsigned char wmr_controller_status_enable_cmd[64] = {0x06, 0x03, 0x01, 0x00, 0x02};
 	wmr_controller_send_bytes(wcb, wmr_controller_status_enable_cmd, sizeof(wmr_controller_status_enable_cmd));
+	os_nanosleep(U_TIME_1MS_IN_NS * 20); // Sleep 20ms
 	const unsigned char wmr_controller_imu_on_cmd[64] = {0x06, 0x03, 0x02, 0xe1, 0x02};
 	wmr_controller_send_bytes(wcb, wmr_controller_imu_on_cmd, sizeof(wmr_controller_imu_on_cmd));
 
+	wcb->update_yaw_from_optical = true;
+
+	wcb->timesync_counter = 2;
+	wcb->timesync_led_intensity = 200;
+	wcb->timesync_val2 = 500;
+	wcb->timesync_time_offset = 0;
+
+	wcb->timesync_led_intensity_uvar =
+	    (struct u_var_draggable_u16){.val = &wcb->timesync_led_intensity, .min = 1, .max = 399, .step = 1};
+	wcb->timesync_val2_uvar =
+	    (struct u_var_draggable_u16){.val = &wcb->timesync_val2, .min = 0, .max = 1023, .step = 1};
+	wcb->timesync_time_offset_uvar =
+	    (struct u_var_draggable_u16){.val = &wcb->timesync_time_offset, .min = 0, .max = 44, .step = 1};
+
+	u_var_add_root(wcb, wcb->base.str, true);
+	u_var_add_log_level(wcb, &wcb->log_level, "Log Level");
+	u_var_add_pose(wcb, &wcb->pose, "Reported pose");
+
+	u_var_add_gui_header(wcb, NULL, "IMU");
+	u_var_add_ro_vec3_f32(wcb, &wcb->last_imu.acc, "imu.accel");
+	u_var_add_ro_vec3_f32(wcb, &wcb->last_imu.gyro, "imu.gyro");
+	u_var_add_ro_quat_f32(wcb, &wcb->fusion.rot, "fusion.rot");
+	u_var_add_i32(wcb, &wcb->last_imu.temperature, "imu.temperature");
+	u_var_add_ro_u64(wcb, &wcb->last_imu_timestamp_ns, "Last CPU IMU TS");
+	u_var_add_ro_u64(wcb, &wcb->last_imu_device_timestamp_ns, "Last device IMU TS");
+
+	u_var_add_gui_header(wcb, NULL, "Optical Tracking");
+	u_var_add_pose(wcb, &wcb->last_tracked_pose, "Last observed pose");
+	u_var_add_ro_i64(wcb, &wcb->last_tracked_pose_ts, "Last observed pose TS");
+	u_var_add_bool(wcb, &wcb->update_yaw_from_optical, "Update yaw using tracking");
+
+	u_var_add_gui_header(wcb, NULL, "LED Sync");
+	u_var_add_draggable_u16(wcb, &wcb->timesync_led_intensity_uvar, "LED intensity");
+	u_var_add_draggable_u16(wcb, &wcb->timesync_val2_uvar, "U2");
+	u_var_add_draggable_u16(wcb, &wcb->timesync_time_offset_uvar, "time offset (0.5ms increment)");
+	u_var_add_ro_u64(wcb, &wcb->last_timesync_timestamp_ns, "Last CPU timesync TS");
+	u_var_add_ro_u64(wcb, &wcb->last_timesync_device_timestamp_ns, "Last device timesync TS");
+
+	u_var_add_gui_header(wcb, NULL, "Misc");
+	u_var_add_pose(wcb, &wcb->P_aim, "Aim pose offset");
+	u_var_add_pose(wcb, &wcb->P_aim_grip, "Grip pose offset");
+	u_var_add_ro_u64(wcb, &wcb->next_keepalive_timestamp_ns, "Next keepalive TS");
+
 	return true;
+}
+
+/*
+ * Timesync packet format:
+ *  XX    YY    AA    BB    CC    CC    CC    CC    CC    CC    DD    EE
+ *   0     1     2     3     4     5     6     7     8     9    10    11
+ *
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |0              |    1          |        2      |            3  |
+ * |0 1 2 3 4 5 6 7|8 9 0 1 2 3 4 5|6 7 8 9 0 1 2 3|4 5 6 7 8 9 0 1|
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |       XX      |      YY       | C |  U1[0:5]  :[6:8]| TS[0:4] |  XX YY AA BB
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |                           TS[5:36]                            |  CC CC CC CC
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |         TS[37:54]                 |   U2[0:10]          | F2  |  CC CC DD EE
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *
+ * XX = 0x3
+ * YY = 8 bit counter that increments sequentially across timesync and keepalives
+ * C  = 2 bit counter. Always starts as 1, then counts 1,2,3 per packet,
+ *      regardless of the time between. Must not be 0
+ * U1 = Led intensity / pulse length
+ *       - clamped at 1..399 in setLEDPulseLengthMaybe()
+ * TS = 55-bit sync timestamp (in µS) taken from camera exposure timings
+ * U2 = unknown 11-bits
+ *      - Gets multiplied by 2 and has 1000 added before use?
+ *      - Looks like it gets extended to 64-bit and used in an unclear way
+ *      - Looks like it should affect something in the HID status report packet
+ *      - First WMR packet is always 800
+ *      - Minimum value seen from WMR is 0, max (after the initial 800) is 1023
+ * F  = flags? 3 bits. Allowed values seem to be 1,2,3,4
+ *      - WMR always sends 1. Seems like 2 might be 'off'
+ *      - Referred to as 'LED train type'
+ */
+static void
+fill_timesync_packet(
+    uint8_t buf[12], uint8_t cmd_ctr, uint8_t ts_ctr, int led_intensity, uint64_t ts, int U2, uint8_t flags)
+{
+	ts_ctr = (ts_ctr & 0x3);
+	led_intensity = CLAMP(led_intensity, 1, 399);
+	U2 = CLAMP(U2, 0, 1023);
+
+	buf[0] = 0x3;
+	buf[1] = cmd_ctr;
+	buf[2] = ts_ctr | ((led_intensity & 0x3f) << 2);
+	buf[3] = ((led_intensity >> 6) & 0x7) | ((ts & 0x1f) << 3);
+	buf[4] = ts >> 5;
+	buf[5] = ts >> 13;
+	buf[6] = ts >> 21;
+	buf[7] = ts >> 29;
+	buf[8] = ts >> 37;
+	buf[9] = ts >> 45;
+	buf[10] = ((ts >> 53) & 0x3) | (U2 << 2);
+	buf[11] = ((U2 >> 6) & 0x1f) | ((flags & 0x3) << 5);
+}
+
+/* Called with data_lock held */
+static void
+wmr_controller_base_send_timesync(struct wmr_controller_base *wcb)
+{
+	/* @todo: Check if timesync values have changed and skip sending if not */
+	uint8_t timesync_pkt[12];
+
+	os_mutex_lock(&wcb->conn_lock);
+	struct wmr_controller_connection *conn = wcb->wcc;
+	if (conn != NULL) {
+		/* Each timesync_time_offset step is 0.5ms */
+		uint64_t time_offset_us = wcb->timesync_time_offset * 500;
+
+		/* Timesync counter counts 1/2/3 in a loop per packet */
+		uint8_t ts_ctr = wcb->timesync_counter++;
+		if (wcb->timesync_counter == 4) {
+			wcb->timesync_counter = 1;
+		}
+
+		int led_intensity = wcb->timesync_led_intensity;
+		uint64_t slam_time_us = wcb->timesync_device_slam_time_us + time_offset_us;
+		int val2 = wcb->timesync_val2;
+
+		fill_timesync_packet(timesync_pkt, wcb->cmd_counter++, ts_ctr, led_intensity, slam_time_us, val2, 1);
+		os_mutex_unlock(&wcb->data_lock);
+		wmr_controller_connection_send_bytes(conn, timesync_pkt, sizeof(timesync_pkt));
+
+		os_mutex_unlock(&wcb->conn_lock);
+		os_mutex_lock(&wcb->data_lock);
+
+		WMR_DEBUG(
+		    wcb, "%s controller timesync counter %u led_intensity %u time %" PRIu64 " offset %" PRIu64 " U2 %u",
+		    wcb->base.device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER ? "Left" : "Right", ts_ctr,
+		    wcb->timesync_led_intensity, slam_time_us, time_offset_us, val2);
+		WMR_TRACE_HEX(wcb, timesync_pkt, sizeof(timesync_pkt));
+	} else {
+		os_mutex_unlock(&wcb->conn_lock);
+	}
+}
+
+static void
+wmr_controller_base_notify_frame(struct xrt_device *xdev, uint64_t frame_mono_ns, uint64_t frame_sequence)
+{
+	struct wmr_controller_base *wcb = (struct wmr_controller_base *)xdev;
+
+	os_mutex_lock(&wcb->data_lock);
+
+	/* The frame cadence is SLAM/controller/controller. Only controller frames are received
+	 * here. On the 2nd controller frame, we need to pass the estimate of the time of the next
+	 * *1st controller frame* minus 1/3 of a frame duration to the controller timesync methods.
+	 * That is 2/90 + 1/270 = 5/270 or 5/3rds of the average frame duration.
+	 * @todo: Also calculate how many full 3-frame cycles have passed since the last
+	 * '2nd Controller frame' to add to our estimate in case of scheduling delays.
+	 * @todo: Move the 'next frame' estimate into the controller timesync code so it's
+	 * calculated when the led control packet is actually about to be sent.
+	 * Since only controller frames get passed to here, the 2nd sequential controller
+	 * frame is the one right before the next SLAM frame */
+	bool is_second_frame = (wcb->last_frame_sequence + 1) == frame_sequence;
+
+	if (is_second_frame) {
+		// on the 2nd sequential (controller) frame, update the controller timesync estimate of the next SLAM
+		// frame's time
+		timepoint_ns next_slam_mono_ns = (timepoint_ns)(frame_mono_ns) + U_TIME_1MS_IN_NS * 18;
+
+		timepoint_ns next_device_slam_time_ns;
+		if (m_clock_windowed_skew_tracker_to_remote(wcb->hw2mono_clock, next_slam_mono_ns,
+		                                            &next_device_slam_time_ns)) {
+			uint64_t next_device_slam_time_us = next_device_slam_time_ns / 1000;
+
+			if (next_device_slam_time_us != wcb->timesync_device_slam_time_us) {
+				wcb->timesync_device_slam_time_us = next_device_slam_time_us;
+				wcb->timesync_updated = true;
+			}
+
+			wcb->last_timesync_device_timestamp_ns = next_device_slam_time_ns;
+			wcb->last_timesync_timestamp_ns = next_slam_mono_ns;
+		}
+	}
+
+	wcb->last_frame_timestamp = frame_mono_ns;
+	wcb->last_frame_sequence = frame_sequence;
+
+	os_mutex_unlock(&wcb->data_lock);
+}
+
+/* Called with data_lock held */
+static void
+wmr_controller_base_send_keepalive(struct wmr_controller_base *wcb, uint64_t now_ns)
+{
+	const uint64_t KEEPALIVE_DURATION = 125 * U_TIME_1MS_IN_NS;
+
+	if (wcb->next_keepalive_timestamp_ns > now_ns) {
+		/* Too soon to send the Keepalive */
+		return;
+	}
+
+
+	os_mutex_lock(&wcb->conn_lock);
+	struct wmr_controller_connection *conn = wcb->wcc;
+	if (conn != NULL) {
+		uint8_t keepalive_pkt[2];
+
+		keepalive_pkt[0] = WMR_MOTION_CONTROLLER_KEEPALIVE;
+		keepalive_pkt[1] = wcb->cmd_counter++;
+
+		os_mutex_unlock(&wcb->data_lock);
+		wmr_controller_connection_send_bytes(conn, keepalive_pkt, sizeof(keepalive_pkt));
+
+		os_mutex_unlock(&wcb->conn_lock);
+		os_mutex_lock(&wcb->data_lock);
+	}
+
+	/* Calculate the next timeout */
+	if (wcb->next_keepalive_timestamp_ns == 0) {
+		wcb->next_keepalive_timestamp_ns = now_ns + KEEPALIVE_DURATION;
+	} else {
+		wcb->next_keepalive_timestamp_ns += KEEPALIVE_DURATION;
+	}
+}
+
+#define WMR_RING_HEIGHT 0.02194146618190565
+#define WMR_RING_TOP_RADIUS (0.11277887330599087 / 2.0)
+#define WMR_RING_BOTTOM_RADIUS (0.09375531956362483 / 2.0)
+
+static bool
+conical_frustum_ray_intersect(struct xrt_vec3 ray_origin,
+                              struct xrt_vec3 ray_dir,
+                              struct xrt_vec3 base_center,
+                              struct xrt_vec3 axis,
+                              float h,
+                              float r1,
+                              float r2,
+                              float *hit_time)
+{
+	// cone has it's base on the bottom, must shrink as it goes up
+	assert(r1 > r2);
+
+	// compute cone slope k = (r1 - r2) / h
+	float k = (r1 - r2) / h;
+	float k2 = k * k;
+
+	// apex of the cone
+	float cone_height = r1 / k;
+	struct xrt_vec3 apex = m_vec3_sub(base_center, m_vec3_mul_scalar(axis, cone_height));
+
+	// vector from apex to ray origin
+	struct xrt_vec3 delta_p = m_vec3_sub(ray_origin, apex);
+
+	// dot products
+	float dv = m_vec3_dot(ray_dir, axis);
+	float pv = m_vec3_dot(delta_p, axis);
+
+	// quadratic coefficients
+	float a = m_vec3_dot(ray_dir, ray_dir) - (1 + k2) * dv * dv;
+	float b = 2 * (m_vec3_dot(ray_dir, delta_p) - (1 + k2) * dv * pv);
+	float c = m_vec3_dot(delta_p, delta_p) - (1 + k2) * pv * pv;
+
+	// discriminant
+	float discriminant = b * b - 4 * a * c;
+	if (discriminant < -1e-6f) // allow some small numerical tolerance
+		return false;
+
+	if (discriminant < 0.0f)
+		discriminant = 0.0f;
+
+	float sqrt_d = sqrtf(discriminant);
+	float t0 = (-b - sqrt_d) / (2 * a);
+	float t1 = (-b + sqrt_d) / (2 * a);
+
+	// pick nearest positive intersection
+	float t = t0 > 0 ? t0 : t1;
+	if (t < 0)
+		return false;
+
+	// intersection point
+	struct xrt_vec3 p = m_vec3_add(ray_origin, m_vec3_mul_scalar(ray_dir, t));
+
+	// project onto cone axis to check vertical bounds
+	float u = m_vec3_dot(m_vec3_sub(p, base_center), axis);
+	if (u < 0 || u > h)
+		return false;
+
+	if (hit_time)
+		*hit_time = t;
+
+	return true;
+}
+
+static bool
+wmr_controller_base_check_led_visibility(struct t_constellation_led_model *led_model,
+                                         size_t led_index,
+                                         struct xrt_vec3 T_obj_cam)
+{
+	// @todo *so much* of this can be pre-computed... but this is fine for now.
+
+	struct t_constellation_led *led = &led_model->leds[led_index];
+
+	struct xrt_vec3 led_dir = led->dir;
+	led_dir.z = 0;
+	math_vec3_normalize(&led_dir);
+
+	struct xrt_vec3 led_dir_to_z_axis = m_vec3_inverse((struct xrt_vec3){led->pos.x, led->pos.y, 0});
+	math_vec3_normalize(&led_dir_to_z_axis);
+
+	float angle_away_from_origin = fabsf(acosf(m_vec3_dot(led_dir_to_z_axis, led_dir)));
+
+	struct xrt_vec3 ring_base_pos = {0, 0, (WMR_RING_HEIGHT / 2.0)};
+	struct xrt_vec3 ring_base_rot = {0, 0, -1};
+
+	// for inward-facing LEDs, check if they intersect with the Cone
+	if (angle_away_from_origin < DEG_TO_RAD(30.0) &&
+	    conical_frustum_ray_intersect(led->pos, m_vec3_normalize(m_vec3_sub(T_obj_cam, led->pos)), ring_base_pos,
+	                                  ring_base_rot, WMR_RING_HEIGHT, WMR_RING_TOP_RADIUS, WMR_RING_BOTTOM_RADIUS,
+	                                  NULL)) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool
+wmr_controller_base_get_led_model(struct xrt_device *xdev, struct t_constellation_led_model *led_model)
+{
+	struct wmr_controller_base *wcb = (struct wmr_controller_base *)(xdev);
+
+	os_mutex_lock(&wcb->data_lock);
+	if (!wcb->have_config) {
+		os_mutex_unlock(&wcb->data_lock);
+		return false;
+	}
+	os_mutex_unlock(&wcb->data_lock);
+
+	t_constellation_led_model_init((int)wcb->base.device_type, NULL, led_model, wcb->config.led_count, 8);
+	led_model->check_led_visibility = wmr_controller_base_check_led_visibility;
+
+	// Note: This LED model is in OpenCV/WMR coordinates with
+	// XYZ = Right/Down/Forward
+	for (int i = 0; i < wcb->config.led_count; i++) {
+		struct t_constellation_led *led = led_model->leds + i;
+
+		led->id = i;
+
+		struct wmr_led_config *wmr_led = &wcb->config.leds[i];
+		led->pos = wmr_led->pos;
+		led->dir = wmr_led->norm;
+
+		led->radius_mm = 3;
+	}
+
+	const float controller_height = 0.150; // controller is about 150mm high
+	const float bounding_box_back = -(controller_height - (WMR_RING_HEIGHT / 2.0));
+
+	const float base_radius = 0.070 / 2.0; // the width between the the left and right of the controller's face
+
+	struct xrt_vec3 bounding_points[8] = {
+	    {WMR_RING_TOP_RADIUS, WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2},   // +Z, +X, +Y
+	    {-WMR_RING_TOP_RADIUS, WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2},  // +Z, -X, +Y
+	    {WMR_RING_TOP_RADIUS, -WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2},  // +Z, +X, -Y
+	    {-WMR_RING_TOP_RADIUS, -WMR_RING_TOP_RADIUS, WMR_RING_HEIGHT / 2}, // +Z, -X, -Y
+	    {base_radius, base_radius, bounding_box_back},                     // -Z, +X, +Y
+	    {-base_radius, base_radius, bounding_box_back},                    // -Z, -X, +Y
+	    {base_radius, -base_radius, bounding_box_back},                    // -Z, +X, -Y
+	    {-base_radius, -base_radius, bounding_box_back},                   // -Z, -X, -Y
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(bounding_points); i++) {
+		led_model->bounding_points[i].pos = bounding_points[i];
+	}
+
+	t_constellation_led_model_dump(led_model, wcb->base.str);
+
+	return true;
+}
+
+static void
+wmr_controller_base_push_brightness_update(struct xrt_device *xdev, uint8_t average_brightness)
+{
+	struct wmr_controller_base *wcb = (struct wmr_controller_base *)(xdev);
+	os_mutex_lock(&wcb->data_lock);
+
+	if (average_brightness > 70) {
+		wcb->timesync_led_intensity -= MIN(wcb->timesync_led_intensity, 3);
+	}
+
+	if (average_brightness < 30) {
+		wcb->timesync_led_intensity = MIN(wcb->timesync_led_intensity + 10, 399);
+	}
+
+	os_mutex_unlock(&wcb->data_lock);
+}
+
+static void
+wmr_controller_base_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame_mono_ns, const struct xrt_pose *pose)
+{
+	struct wmr_controller_base *wcb = (struct wmr_controller_base *)(xdev);
+	os_mutex_lock(&wcb->data_lock);
+
+	wcb->last_tracked_pose_ts = frame_mono_ns;
+	wcb->last_tracked_pose = *pose;
+
+	if (wcb->update_yaw_from_optical) {
+#if 1
+		// Apply 5% of observed orientation yaw to 3dof fusion
+		// FIXME: Do better
+		struct xrt_quat delta;
+		math_quat_unrotate(&wcb->fusion.rot, &pose->orientation, &delta);
+		delta.x = delta.z = 0.0; // We only want Yaw
+
+		if (fabs(delta.y) > sin(DEG_TO_RAD(5)) / 2) {
+			delta.y = sin(0.10 * asinf(delta.y)); // 10% correction
+			math_quat_normalize(&delta);
+
+			struct xrt_quat prev = wcb->fusion.rot;
+			math_quat_rotate(&wcb->fusion.rot, &delta, &wcb->fusion.rot);
+
+			if (wcb->log_level <= U_LOGGING_DEBUG) {
+				struct xrt_quat post_delta;
+				math_quat_unrotate(&wcb->fusion.rot, &pose->orientation, &post_delta);
+				post_delta.x = post_delta.z = 0.0;  // We only want Yaw
+				post_delta.y = 0.10 * post_delta.y; // 5%
+				math_quat_normalize(&post_delta);
+
+				WMR_DEBUG(wcb,
+				          "Applying delta yaw rotation of %f degrees delta quat %f,%f,%f,%f from "
+				          "%f,%f,%f,%f to "
+				          "%f,%f,%f,%f. delta after correction: %f,%f,%f,%f",
+				          RAD_TO_DEG(2 * asinf(delta.y)), delta.x, delta.y, delta.z, delta.w, prev.x,
+				          prev.y, prev.z, prev.w, wcb->fusion.rot.x, wcb->fusion.rot.y,
+				          wcb->fusion.rot.z, wcb->fusion.rot.w, post_delta.x, post_delta.y,
+				          post_delta.z, post_delta.w);
+			}
+		} else {
+			math_quat_normalize(&delta);
+
+			WMR_DEBUG(wcb, "Applying full yaw correction of %f degrees. delta quat %f,%f,%f,%f",
+			          RAD_TO_DEG(2 * asinf(delta.y)), delta.x, delta.y, delta.z, delta.w);
+			math_quat_rotate(&wcb->fusion.rot, &delta, &wcb->fusion.rot);
+		}
+#else
+		wcb->fusion.rot = pose->orientation;
+#endif
+	}
+
+	os_mutex_unlock(&wcb->data_lock);
+}
+
+static struct t_constellation_tracked_device_callbacks tracking_callbacks = {
+    .get_led_model = wmr_controller_base_get_led_model,
+    .notify_frame_received = wmr_controller_base_notify_frame,
+    .push_observed_pose = wmr_controller_base_push_observed_pose,
+    .push_brightness_update = wmr_controller_base_push_brightness_update,
+};
+
+void
+wmr_controller_attach_to_hmd(struct wmr_controller_base *wcb, struct wmr_hmd *hmd)
+{
+	/* Register the controller with the HMD for LED constellation tracking and LED sync timing updates */
+	wcb->tracking_connection = wmr_hmd_add_tracked_controller(hmd, &wcb->base, &tracking_callbacks);
 }

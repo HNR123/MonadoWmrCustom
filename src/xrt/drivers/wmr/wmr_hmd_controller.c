@@ -71,9 +71,19 @@ read_sync_from_controller(struct wmr_controller_connection *wcc, uint8_t *buffer
 
 	os_mutex_lock(&conn->lock);
 	if (!conn->disconnected && buf_size > 0) {
+		conn->busy += 1;
+		os_mutex_unlock(&conn->lock);
+
 		res = wmr_hmd_read_sync_from_controller(conn->hmd, buffer, buf_size, timeout_ms);
 		if (res > 0) {
 			buffer[0] -= conn->hmd_cmd_base;
+		}
+
+		os_mutex_lock(&conn->lock);
+		assert(conn->busy > 0);
+		conn->busy -= 1;
+		if (!conn->busy) {
+			os_cond_signal(&conn->cond);
 		}
 	}
 	os_mutex_unlock(&conn->lock);
@@ -92,9 +102,19 @@ receive_bytes_from_controller(struct wmr_controller_connection *wcc,
 	if (!conn->disconnected && buf_size > 0) {
 		buffer[0] -= conn->hmd_cmd_base;
 
+		conn->busy += 1;
+		os_mutex_unlock(&conn->lock);
+
 		struct wmr_controller_base *wcb = wcc->wcb;
 		assert(wcb->receive_bytes != NULL);
 		wcb->receive_bytes(wcb, time_ns, buffer, buf_size);
+
+		os_mutex_lock(&conn->lock);
+		assert(conn->busy > 0);
+		conn->busy -= 1;
+		if (!conn->busy) {
+			os_cond_signal(&conn->cond);
+		}
 	}
 	os_mutex_unlock(&conn->lock);
 }
@@ -105,6 +125,7 @@ wmr_hmd_controller_connection_destroy(struct wmr_hmd_controller_connection *conn
 	DRV_TRACE_MARKER();
 
 	os_mutex_destroy(&conn->lock);
+	os_cond_destroy(&conn->cond);
 	free(conn);
 }
 
@@ -113,10 +134,15 @@ wmr_hmd_controller_connection_disconnect(struct wmr_controller_connection *base)
 {
 	struct wmr_hmd_controller_connection *conn = (struct wmr_hmd_controller_connection *)(base);
 
+	os_mutex_lock(&conn->lock);
+	while (conn->busy > 0) {
+		os_cond_wait(&conn->cond, &conn->lock);
+	}
+
 	if (xrt_reference_dec_and_is_zero(&conn->ref)) {
+		os_mutex_unlock(&conn->lock);
 		wmr_hmd_controller_connection_destroy(conn);
 	} else {
-		os_mutex_lock(&conn->lock);
 		conn->disconnected = true;
 		conn->base.wcb = NULL;
 		os_mutex_unlock(&conn->lock);
@@ -158,6 +184,13 @@ wmr_hmd_controller_create(struct wmr_hmd *hmd,
 		return NULL;
 	}
 
+	ret = os_cond_init(&conn->cond);
+	if (ret != 0) {
+		WMR_ERROR(conn, "WMR Controller (Tunnelled): Failed to init condition!");
+		wmr_hmd_controller_connection_destroy(conn);
+		return NULL;
+	}
+
 	// Takes ownership of one reference to the connection, the other will
 	// belong to the returned pointer
 	struct wmr_controller_base *wcb = wmr_controller_create(&conn->base, controller_type, vid, pid, log_level);
@@ -174,13 +207,9 @@ wmr_hmd_controller_create(struct wmr_hmd *hmd,
 	return conn;
 }
 
-struct xrt_device *
+struct wmr_controller_base *
 wmr_hmd_controller_connection_get_controller(struct wmr_hmd_controller_connection *wcc)
 {
 	struct wmr_controller_base *wcb = wcc->base.wcb;
-	if (wcb == NULL)
-		return NULL;
-
-	struct xrt_device *xdev = &wcb->base;
-	return xdev;
+	return wcb;
 }

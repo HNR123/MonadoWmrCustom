@@ -14,6 +14,10 @@
 
 #include "util/u_trace_marker.h"
 
+#ifdef XRT_OS_LINUX
+#include "util/u_linux.h"
+#endif
+
 #include "wmr_common.h"
 #include "wmr_bt_controller.h"
 #include "wmr_controller.h"
@@ -105,15 +109,24 @@ wmr_bt_connection_run_thread(void *ptr)
 
 	struct wmr_bt_connection *conn = wmr_bt_connection(ptr);
 
+#ifdef XRT_OS_LINUX
+	// Try to raise priority of this thread.
+	u_linux_try_to_set_realtime_priority_on_thread(conn->log_level, "WMR: BT-Controller");
+#endif
+
 	os_thread_helper_lock(&conn->controller_thread);
 	while (os_thread_helper_is_running_locked(&conn->controller_thread)) {
 		os_thread_helper_unlock(&conn->controller_thread);
 
-		// Does not block.
-		if (!read_packets(conn)) {
+		bool res = read_packets(conn);
+
+		os_thread_helper_lock(&conn->controller_thread);
+
+		if (!res) {
 			break;
 		}
 	}
+	os_thread_helper_unlock(&conn->controller_thread);
 
 	WMR_DEBUG(conn, "WMR Controller (Bluetooth): Exiting reading thread.");
 
@@ -146,7 +159,7 @@ wmr_bt_connection_destroy(struct wmr_controller_connection *base)
  *
  */
 
-struct xrt_device *
+struct wmr_controller_base *
 wmr_bt_controller_create(struct os_hid_device *controller_hid,
                          enum xrt_device_type controller_type,
                          uint16_t vid,
@@ -202,5 +215,5 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
 		return NULL;
 	}
 
-	return xdev;
+	return wcb;
 }
