@@ -390,19 +390,16 @@ submit_device_pose(struct t_constellation_tracker *ct,
 		float rot_diff = acosf(dot) * 2.0f; // grobe Winkelabschätzung
 
 		if (pos_diff < 0.05f && rot_diff < (10.0f * (M_PI/180.0f))) {
-			float alpha = 0.2f; // Glättung
+			// Einfaches Smoothing
+			float alpha = 0.2f; // 0.0 = kein Update, 1.0 = sofortige Übernahme
 
-			// Position
-			struct xrt_vec3 new_pos = P_cam_obj->position;
-			math_vec3_subtract(&refine_pose.position, &new_pos); // delta = refine - old
-			math_vec3_scalar_mul(alpha, &refine_pose.position);
-			math_vec3_accum(&refine_pose.position, &new_pos);
-			P_cam_obj->position = new_pos;
+			// Position glätten
+			P_cam_obj->position.x = alpha * refine_pose.position.x + (1.0f - alpha) * P_cam_obj->position.x;
+			P_cam_obj->position.y = alpha * refine_pose.position.y + (1.0f - alpha) * P_cam_obj->position.y;
+			P_cam_obj->position.z = alpha * refine_pose.position.z + (1.0f - alpha) * P_cam_obj->position.z;
 
-			// Orientierung (slerp)
-			struct xrt_quat blended;
-			math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, alpha, &blended);
-			P_cam_obj->orientation = blended;
+			// Orientierung glätten (slerp)
+			math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, alpha, &P_cam_obj->orientation);
 			}
 		}
 	}
