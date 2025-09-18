@@ -101,7 +101,7 @@ p_select_device(struct xrt_prober *xp, struct xrt_device **xdevs, size_t xdev_co
 static int
 p_open_hid_interface(struct xrt_prober *xp,
                      struct xrt_prober_device *xpdev,
-                     int hid_iface,
+                     int interface,
                      struct os_hid_device **out_hid_dev);
 
 static int
@@ -852,15 +852,12 @@ print_system_devices(u_pp_delegate_t dg, struct xrt_system_devices *xsysd)
 
 	u_pp(dg, "\n\tIn roles:");
 
-#define GET(IDENT, FIELD, DEFAULT) xsysd->static_roles.IDENT ? xsysd->static_roles.IDENT->FIELD : DEFAULT
-#define GET_XDEV(IDENT, FIELD, DEFAULT) roles.IDENT >= 0 ? xsysd->xdevs[roles.IDENT]->FIELD : DEFAULT
-
 #define PH(IDENT)                                                                                                      \
-	u_pp(dg, "\n\t\t%s: %s (%s), view count: %zu", #IDENT, GET(IDENT, str, "<none>"),                              \
-	     GET(IDENT, serial, "<none>"), GET(IDENT, hmd->view_count, 0u));
-#define P(IDENT) u_pp(dg, "\n\t\t%s: %s (%s)", #IDENT, GET(IDENT, str, "<none>"), GET(IDENT, serial, "<none>"))
-#define PD(IDENT)                                                                                                      \
-	u_pp(dg, "\n\t\t%s: %s (%s)", #IDENT, GET_XDEV(IDENT, str, "<none>"), GET_XDEV(IDENT, serial, "<none>"))
+	u_pp(dg, "\n\t\t%s: %s, view count: %zu", #IDENT,                                                              \
+	     xsysd->static_roles.IDENT ? xsysd->static_roles.IDENT->str : "<none>",                                    \
+	     xsysd->static_roles.IDENT ? xsysd->static_roles.IDENT->hmd->view_count : 0u);
+#define P(IDENT) u_pp(dg, "\n\t\t%s: %s", #IDENT, xsysd->static_roles.IDENT ? xsysd->static_roles.IDENT->str : "<none>")
+#define PD(IDENT) u_pp(dg, "\n\t\t%s: %s", #IDENT, roles.IDENT >= 0 ? xsysd->xdevs[roles.IDENT]->str : "<none>")
 
 	PH(head);
 	P(eyes);
@@ -868,16 +865,11 @@ print_system_devices(u_pp_delegate_t dg, struct xrt_system_devices *xsysd)
 	PD(left);
 	PD(right);
 	PD(gamepad);
-	P(hand_tracking.unobstructed.left);
-	P(hand_tracking.unobstructed.right);
-	P(hand_tracking.conforming.left);
-	P(hand_tracking.conforming.right);
+	P(hand_tracking.left);
+	P(hand_tracking.right);
 
 #undef P
 #undef PD
-#undef PH
-#undef GET
-#undef GET_XDEV
 }
 
 
@@ -1187,7 +1179,7 @@ p_select_device(struct xrt_prober *xp, struct xrt_device **xdevs, size_t xdev_co
 static int
 p_open_hid_interface(struct xrt_prober *xp,
                      struct xrt_prober_device *xpdev,
-                     int hid_iface,
+                     int interface,
                      struct os_hid_device **out_hid_dev)
 {
 	XRT_TRACE_MARKER();
@@ -1199,7 +1191,7 @@ p_open_hid_interface(struct xrt_prober *xp,
 	for (size_t j = 0; j < pdev->num_hidraws; j++) {
 		struct prober_hidraw *hidraw = &pdev->hidraws[j];
 
-		if (hidraw->hid_iface != hid_iface) {
+		if (hidraw->interface != interface) {
 			continue;
 		}
 
@@ -1212,13 +1204,13 @@ p_open_hid_interface(struct xrt_prober *xp,
 		return 0;
 	}
 
-	U_LOG_E("Could not find the requested hid interface (%i) on the device!", hid_iface);
+	U_LOG_E("Could not find the requested hid interface (%i) on the device!", interface);
 	return -1;
 
 #elif defined(XRT_OS_WINDOWS)
 	(void)pdev;
 	(void)ret;
-	U_LOG_E("HID devices not yet supported on Windows, cannot open interface (%i)", hid_iface);
+	U_LOG_E("HID devices not yet supported on Windows, cannot open interface (%i)", interface);
 	return -1;
 #else
 #error "no port of hid code"

@@ -50,7 +50,7 @@
  */
 struct prober_hidraw
 {
-	ssize_t hid_iface;
+	ssize_t interface;
 	const char *path;
 };
 

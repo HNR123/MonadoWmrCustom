@@ -121,7 +121,6 @@ struct vk_bundle
 	} external;
 
 	// beginning of GENERATED instance extension code - do not modify - used by scripts
-	bool has_KHR_external_memory_capabilities;
 	bool has_EXT_display_surface_counter;
 	bool has_EXT_swapchain_colorspace;
 	bool has_EXT_debug_utils;
@@ -130,7 +129,6 @@ struct vk_bundle
 	// beginning of GENERATED device extension code - do not modify - used by scripts
 	bool has_KHR_8bit_storage;
 	bool has_KHR_external_fence_fd;
-	bool has_KHR_external_memory;
 	bool has_KHR_external_semaphore_fd;
 	bool has_KHR_format_feature_flags2;
 	bool has_KHR_global_priority;
@@ -139,13 +137,11 @@ struct vk_bundle
 	bool has_KHR_maintenance2;
 	bool has_KHR_maintenance3;
 	bool has_KHR_maintenance4;
-	bool has_KHR_present_wait;
 	bool has_KHR_synchronization2;
 	bool has_KHR_timeline_semaphore;
 	bool has_EXT_calibrated_timestamps;
 	bool has_EXT_display_control;
 	bool has_EXT_external_memory_dma_buf;
-	bool has_EXT_external_memory_host;
 	bool has_EXT_global_priority;
 	bool has_EXT_image_drm_format_modifier;
 	bool has_EXT_robustness2;
@@ -175,9 +171,6 @@ struct vk_bundle
 
 		//! Was synchronization2 requested, available, and enabled?
 		bool synchronization_2;
-
-		//! Was KHR_present_wait requested, available, and enabled?
-		bool present_wait;
 	} features;
 
 	//! Is the GPU a tegra device.
@@ -425,11 +418,6 @@ struct vk_bundle
 
 #endif // defined(VK_USE_PLATFORM_ANDROID_KHR)
 
-#if defined(VK_EXT_external_memory_host)
-	PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
-
-#endif // defined(VK_EXT_external_memory_host)
-
 #if defined(VK_EXT_calibrated_timestamps)
 	PFN_vkGetCalibratedTimestampsEXT vkGetCalibratedTimestampsEXT;
 
@@ -458,12 +446,7 @@ struct vk_bundle
 	PFN_vkQueueInsertDebugUtilsLabelEXT vkQueueInsertDebugUtilsLabelEXT;
 	PFN_vkSetDebugUtilsObjectNameEXT vkSetDebugUtilsObjectNameEXT;
 	PFN_vkSetDebugUtilsObjectTagEXT vkSetDebugUtilsObjectTagEXT;
-
 #endif // defined(VK_EXT_debug_utils)
-
-#if defined(VK_KHR_present_wait)
-	PFN_vkWaitForPresentKHR vkWaitForPresentKHR;
-#endif // defined(VK_KHR_present_wait)
 
 	// end of GENERATED device loader code - do not modify - used by scripts
 };
@@ -558,15 +541,6 @@ struct vk_buffer
 		}                                                                                                      \
 	} while (false)
 
-
-static inline void
-vk_append_to_pnext_chain(VkBaseInStructure *head, VkBaseInStructure *new_struct)
-{
-	assert(new_struct->pNext == NULL);
-	// Insert ourselves between head and its previous pNext
-	new_struct->pNext = head->pNext;
-	head->pNext = new_struct;
-}
 
 /*
  *
@@ -1028,7 +1002,6 @@ struct vk_device_features
 	bool synchronization_2;
 	bool ext_fmt_resolve;
 	bool storage_buffer_8bit_access;
-	bool present_wait;
 };
 
 /*!

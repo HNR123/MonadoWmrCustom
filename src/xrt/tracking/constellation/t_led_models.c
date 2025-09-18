@@ -19,8 +19,7 @@ void
 t_constellation_led_model_init(uint8_t device_id,
                                struct xrt_pose *P_device_model,
                                struct t_constellation_led_model *led_model,
-                               uint8_t num_leds,
-                               uint8_t num_bounding_points)
+                               uint8_t num_leds)
 {
 	led_model->id = device_id;
 	if (P_device_model != NULL) {
@@ -31,8 +30,6 @@ t_constellation_led_model_init(uint8_t device_id,
 	}
 	led_model->leds = calloc(num_leds, sizeof(struct t_constellation_led));
 	led_model->num_leds = num_leds;
-	led_model->bounding_points = calloc(num_bounding_points, sizeof(struct t_constellation_bounding_point));
-	led_model->num_bounding_points = num_bounding_points;
 }
 
 void
@@ -40,14 +37,11 @@ t_constellation_led_model_dump(struct t_constellation_led_model *led_model, cons
 {
 	int i;
 	printf("LED model: %s\n", desc);
-	printf("x,y,z,tx,ty,tz,d\n");
 	for (i = 0; i < led_model->num_leds; i++) {
 		struct t_constellation_led *p = led_model->leds + i;
 
-		// printf("{ .pos = {%f,%f,%f}, .dir={%f,%f,%f} },\n", p->pos.x, p->pos.y, p->pos.z, p->dir.x, p->dir.y,
-		//        p->dir.z);
-		printf("%f,%f,%f,%f,%f,%f,%f\n", p->pos.x, p->pos.y, p->pos.z, p->dir.x, p->dir.y, p->dir.z,
-		       p->radius_mm / 1000.0);
+		printf("{ .pos = {%f,%f,%f}, .dir={%f,%f,%f} },\n", p->pos.x, p->pos.y, p->pos.z, p->dir.x, p->dir.y,
+		       p->dir.z);
 	}
 }
 

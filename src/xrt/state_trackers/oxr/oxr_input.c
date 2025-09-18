@@ -799,10 +799,13 @@ oxr_find_profiles_from_roles(struct oxr_logger *log,
                              struct oxr_profiles_per_subaction *out_profiles)
 {
 #define FIND_PROFILE(X)                                                                                                \
-	if (!oxr_get_profile_for_device_name(log, sess, GET_PROFILE_NAME_BY_ROLE(sess->sys, X), &out_profiles->X)) {   \
+	{                                                                                                              \
 		struct xrt_device *xdev = GET_XDEV_BY_ROLE(sess->sys, X);                                              \
 		if (xdev != NULL) {                                                                                    \
 			oxr_find_profile_for_device(log, sess, xdev, &out_profiles->X);                                \
+		} else {                                                                                               \
+			oxr_get_profile_for_device_name(log, sess, GET_PROFILE_NAME_BY_ROLE(sess->sys, X),             \
+			                                &out_profiles->X);                                             \
 		}                                                                                                      \
 	}
 	OXR_FOR_EACH_VALID_SUBACTION_PATH(FIND_PROFILE)
@@ -890,13 +893,7 @@ oxr_action_cache_stop_output(struct oxr_logger *log, struct oxr_session *sess, s
 		struct oxr_action_output *output = &cache->outputs[i];
 		struct xrt_device *xdev = output->xdev;
 
-		xrt_result_t xret = xrt_device_set_output(xdev, output->name, &value);
-		if (xret != XRT_SUCCESS) {
-			struct oxr_sink_logger slog = {0};
-			oxr_slog(&slog, "Failed to stop output ");
-			u_pp_xrt_output_name(oxr_slog_dg(&slog), output->name);
-			oxr_log_slog(log, &slog);
-		}
+		xrt_device_set_output(xdev, output->name, &value);
 	}
 }
 
@@ -1508,37 +1505,6 @@ oxr_action_populate_input_transform_dpad(struct oxr_logger *log,
 	    &action_input->transform_count);          //
 }
 
-static bool
-is_dpad_region_for_emulation(const char *start, const char *end)
-{
-	// go before the first slash
-	end--;
-
-	while (end > start) {
-		char curr = *end;
-
-		// once we find a slash,
-		if (curr == '/') {
-			const char *to_check[] = {"/thumbstick_", "/thumbstick/", "/trackpad_", "/trackpad/"};
-
-			// check if the passed path is a sub-path of "thumbstick[_|/]" or "trackpad[_|/]"
-			for (size_t i = 0; i < ARRAY_SIZE(to_check); i++) {
-				if (strncmp(end, to_check[i], strlen(to_check[i])) == 0) {
-					// this is for emulation
-					return true;
-				}
-			}
-
-			// it's not for emulation and is an actual dpad region
-			return false;
-		}
-
-		end--;
-	}
-
-	return false;
-}
-
 // based on get_subaction_path_from_path
 static bool
 get_dpad_region_from_path(struct oxr_logger *log,
@@ -1556,28 +1522,23 @@ get_dpad_region_from_path(struct oxr_logger *log,
 	}
 
 	// TODO: surely there's a better way to do this?
-	if (length >= 10 && strncmp("/dpad_left", str + (length - 10), 10) == 0 &&
-	    is_dpad_region_for_emulation(str, str + (length - 10))) {
+	if (length >= 10 && strncmp("/dpad_left", str + (length - 10), 10) == 0) {
 		*out_dpad_region = OXR_DPAD_REGION_LEFT;
 		return true;
 	}
-	if (length >= 11 && strncmp("/dpad_right", str + (length - 11), 11) == 0 &&
-	    is_dpad_region_for_emulation(str, str + (length - 11))) {
+	if (length >= 11 && strncmp("/dpad_right", str + (length - 11), 11) == 0) {
 		*out_dpad_region = OXR_DPAD_REGION_RIGHT;
 		return true;
 	}
-	if (length >= 8 && strncmp("/dpad_up", str + (length - 8), 8) == 0 &&
-	    is_dpad_region_for_emulation(str, str + (length - 8))) {
+	if (length >= 8 && strncmp("/dpad_up", str + (length - 8), 8) == 0) {
 		*out_dpad_region = OXR_DPAD_REGION_UP;
 		return true;
 	}
-	if (length >= 10 && strncmp("/dpad_down", str + (length - 10), 10) == 0 &&
-	    is_dpad_region_for_emulation(str, str + (length - 10))) {
+	if (length >= 10 && strncmp("/dpad_down", str + (length - 10), 10) == 0) {
 		*out_dpad_region = OXR_DPAD_REGION_DOWN;
 		return true;
 	}
-	if (length >= 12 && strncmp("/dpad_center", str + (length - 12), 12) == 0 &&
-	    is_dpad_region_for_emulation(str, str + (length - 12))) {
+	if (length >= 12 && strncmp("/dpad_center", str + (length - 12), 12) == 0) {
 		*out_dpad_region = OXR_DPAD_REGION_CENTER;
 		return true;
 	}
@@ -2192,8 +2153,7 @@ oxr_action_get_pose(struct oxr_logger *log,
  */
 
 static void
-set_action_output_vibration(struct oxr_logger *log,
-                            struct oxr_session *sess,
+set_action_output_vibration(struct oxr_session *sess,
                             struct oxr_action_cache *cache,
                             int64_t stop,
                             const XrHapticVibration *data)
@@ -2210,19 +2170,12 @@ set_action_output_vibration(struct oxr_logger *log,
 		struct oxr_action_output *output = &cache->outputs[i];
 		struct xrt_device *xdev = output->xdev;
 
-		xrt_result_t xret = xrt_device_set_output(xdev, output->name, &value);
-		if (xret != XRT_SUCCESS) {
-			struct oxr_sink_logger slog = {0};
-			oxr_slog(&slog, "Failed to set output vibration ");
-			u_pp_xrt_output_name(oxr_slog_dg(&slog), output->name);
-			oxr_log_slog(log, &slog);
-		}
+		xrt_device_set_output(xdev, output->name, &value);
 	}
 }
 
 XRT_MAYBE_UNUSED static void
-set_action_output_vibration_pcm(struct oxr_logger *log,
-                                struct oxr_session *sess,
+set_action_output_vibration_pcm(struct oxr_session *sess,
                                 struct oxr_action_cache *cache,
                                 const XrHapticPcmVibrationFB *data)
 {
@@ -2238,13 +2191,7 @@ set_action_output_vibration_pcm(struct oxr_logger *log,
 		struct oxr_action_output *output = &cache->outputs[i];
 		struct xrt_device *xdev = output->xdev;
 
-		xrt_result_t xret = xrt_device_set_output(xdev, output->name, &value);
-		if (xret != XRT_SUCCESS) {
-			struct oxr_sink_logger slog = {0};
-			oxr_slog(&slog, "Failed to set output vibration PCM ");
-			u_pp_xrt_output_name(oxr_slog_dg(&slog), output->name);
-			oxr_log_slog(log, &slog);
-		}
+		xrt_device_set_output(xdev, output->name, &value);
 	}
 }
 
@@ -2281,7 +2228,7 @@ oxr_action_apply_haptic_feedback(struct oxr_logger *log,
 
 #define SET_OUT_VIBRATION(X)                                                                                           \
 	if (act_attached->X.current.active && (subaction_paths.X || subaction_paths.any)) {                            \
-		set_action_output_vibration(log, sess, &act_attached->X, stop_ns, data);                               \
+		set_action_output_vibration(sess, &act_attached->X, stop_ns, data);                                    \
 	}
 
 		OXR_FOR_EACH_SUBACTION_PATH(SET_OUT_VIBRATION)
@@ -2292,7 +2239,7 @@ oxr_action_apply_haptic_feedback(struct oxr_logger *log,
 
 #define SET_OUT_VIBRATION(X)                                                                                           \
 	if (act_attached->X.current.active && (subaction_paths.X || subaction_paths.any)) {                            \
-		set_action_output_vibration_pcm(log, sess, &act_attached->X, data);                                    \
+		set_action_output_vibration_pcm(sess, &act_attached->X, data);                                         \
 	}
 
 		OXR_FOR_EACH_SUBACTION_PATH(SET_OUT_VIBRATION)

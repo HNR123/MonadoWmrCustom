@@ -61,31 +61,15 @@ std::string
 find_steamvr_install()
 {
 	using namespace tyti;
-	u_logging_level level = debug_get_log_option_lh_log();
 	std::ifstream file(STEAM_INSTALL_DIR + "/steamapps/libraryfolders.vdf");
-	if (!file.is_open()) {
-		U_LOG_IFL_E(level, "Failed to open libraryfolders.vdf");
-		return std::string();
-	}
-
-	vdf::basic_object<char> root;
-	try {
-		root = vdf::read(file);
-	} catch (std::exception &ex) {
-		U_LOG_IFL_E(level, "Failed to read libraryfolders.vdf: %s", ex.what());
-		return std::string();
-	}
-
+	auto root = vdf::read(file);
 	assert(root.name == "libraryfolders");
 	for (auto &[_, child] : root.childs) {
 		U_LOG_D("Found library folder %s", child->attribs["path"].c_str());
 		std::shared_ptr<vdf::object> apps = child->childs["apps"];
 		for (auto &[appid, _] : apps->attribs) {
 			if (appid == STEAMVR_APPID) {
-				std::string path = child->attribs["path"] + "/steamapps/common/SteamVR";
-				if (std::filesystem::exists(path)) {
-					return path;
-				}
+				return child->attribs["path"] + "/steamapps/common/SteamVR";
 			}
 		}
 	}
@@ -128,7 +112,7 @@ Context::create(const std::string &steam_install,
 }
 
 Context::Context(const std::string &steam_install, const std::string &steamvr_install, u_logging_level level)
-    : settings(steam_install, steamvr_install, this), resources(level, steamvr_install), log_level(level)
+    : settings(steam_install, steamvr_install), resources(level, steamvr_install), log_level(level)
 {}
 
 Context::~Context()
@@ -359,16 +343,7 @@ Context::VendorSpecificEvent(uint32_t unWhichDevice,
                              vr::EVREventType eventType,
                              const vr::VREvent_Data_t &eventData,
                              double eventTimeOffset)
-{
-	std::lock_guard lk(event_queue_mut);
-	events.push_back({std::chrono::steady_clock::now(),
-	                  {
-	                      .eventType = eventType,
-	                      .trackedDeviceIndex = unWhichDevice,
-	                      .eventAgeSeconds = {},
-	                      .data = eventData,
-	                  }});
-}
+{}
 
 bool
 Context::IsExiting()
@@ -734,7 +709,11 @@ get_roles(struct xrt_system_devices *xsysd, struct xrt_system_roles *out_roles)
 	bool update_gen = false;
 	int head, left, right, gamepad;
 
-	u_device_assign_xdev_roles(xsysd->xdevs, xsysd->xdev_count, &head, &left, &right, &gamepad);
+	if (out_roles->generation_id == 0) {
+		gamepad = XRT_DEVICE_ROLE_UNASSIGNED; // No gamepads in steamvr_lh set this unassigned first run
+	}
+
+	u_device_assign_xdev_roles(xsysd->xdevs, xsysd->xdev_count, &head, &left, &right);
 
 	if (left != out_roles->left || right != out_roles->right || gamepad != out_roles->gamepad) {
 		update_gen = true;

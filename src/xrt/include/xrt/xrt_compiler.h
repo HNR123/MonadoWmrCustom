@@ -22,12 +22,7 @@
 #include <intrin.h>
 // for atomic intrinsics
 #include "xrt_windows.h"
-// Older MSVC versions do not have stdalign.h, define it manually using __declspec(align).
-#define XRT_ALIGNAS(n) __declspec(align(n))
-#else // _MSC_VER
-#include <stdalign.h>
-#define XRT_ALIGNAS(align) alignas(align)
-#endif
+#endif // _MSC_VER
 
 #if (defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) ||                                                         \
     (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__) ||                                             \

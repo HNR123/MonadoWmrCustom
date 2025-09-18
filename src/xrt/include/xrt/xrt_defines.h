@@ -13,9 +13,8 @@
 #pragma once
 
 #include "xrt/xrt_compiler.h"
-#include "xrt/xrt_results.h"
 
-#include <stdio.h>
+#include "xrt/xrt_results.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -229,9 +228,10 @@ struct xrt_quat
  * @ingroup xrt_iface math
  * @relates xrt_quat
  */
-// clang-format off
-#define XRT_QUAT_IDENTITY {0.f, 0.f, 0.f, 1.f}
-// clang-format on
+#define XRT_QUAT_IDENTITY                                                                                              \
+	{                                                                                                              \
+		0.f, 0.f, 0.f, 1.f                                                                                     \
+	}
 
 /*!
  * A 1 element vector with single floats.
@@ -294,36 +294,40 @@ struct xrt_vec3_f64
  * @ingroup xrt_iface math
  * @relates xrt_vec3
  */
-// clang-format off
-#define XRT_VEC3_ZERO {0.f, 0.f, 0.f}
-// clang-format on
+#define XRT_VEC3_ZERO                                                                                                  \
+	{                                                                                                              \
+		0.f, 0.f, 0.f                                                                                          \
+	}
 /*!
  * Value for @ref xrt_vec3 with 1 in the @p x coordinate.
  *
  * @ingroup xrt_iface math
  * @relates xrt_vec3
  */
-// clang-format off
-#define XRT_VEC3_UNIT_X {1.f, 0.f, 0.f}
-// clang-format on
+#define XRT_VEC3_UNIT_X                                                                                                \
+	{                                                                                                              \
+		1.f, 0.f, 0.f                                                                                          \
+	}
 /*!
  * Value for @ref xrt_vec3 with 1 in the @p y coordinate.
  *
  * @ingroup xrt_iface math
  * @relates xrt_vec3
  */
-// clang-format off
-#define XRT_VEC3_UNIT_Y {0.f, 1.f, 0.f}
-// clang-format on
+#define XRT_VEC3_UNIT_Y                                                                                                \
+	{                                                                                                              \
+		0.f, 1.f, 0.f                                                                                          \
+	}
 /*!
  * Value for @ref xrt_vec3 with 1 in the @p z coordinate.
  *
  * @ingroup xrt_iface math
  * @relates xrt_vec3
  */
-// clang-format off
-#define XRT_VEC3_UNIT_Z {0.f, 0.f, 1.f}
-// clang-format on
+#define XRT_VEC3_UNIT_Z                                                                                                \
+	{                                                                                                              \
+		0.f, 0.f, 1.f                                                                                          \
+	}
 
 /*!
  * A 3 element vector with 32 bit integers.
@@ -470,9 +474,10 @@ struct xrt_pose
  * @ingroup xrt_iface math
  * @relates xrt_pose
  */
-// clang-format off
-#define XRT_POSE_IDENTITY {XRT_QUAT_IDENTITY, XRT_VEC3_ZERO}
-// clang-format on
+#define XRT_POSE_IDENTITY                                                                                              \
+	{                                                                                                              \
+		XRT_QUAT_IDENTITY, XRT_VEC3_ZERO                                                                       \
+	}
 
 /*!
  * Describes a projection matrix fov.
@@ -667,9 +672,10 @@ struct xrt_space_relation
  * @ingroup xrt_iface math
  * @relates xrt_space_relation
  */
-// clang-format off
-#define XRT_SPACE_RELATION_ZERO {XRT_SPACE_RELATION_BITMASK_NONE, XRT_POSE_IDENTITY, XRT_VEC3_ZERO, XRT_VEC3_ZERO}
-// clang-format on
+#define XRT_SPACE_RELATION_ZERO                                                                                        \
+	{                                                                                                              \
+		XRT_SPACE_RELATION_BITMASK_NONE, XRT_POSE_IDENTITY, XRT_VEC3_ZERO, XRT_VEC3_ZERO                       \
+	}
 
 /*!
  * The maximum number of steps that can be in a relation chain.
@@ -740,7 +746,6 @@ enum xrt_device_name
 	XRT_DEVICE_PSMV,
 	XRT_DEVICE_PSSENSE,
 	XRT_DEVICE_HYDRA,
-	XRT_DEVICE_RIFT_REMOTE,
 
 	// Other misc stuff.
 	XRT_DEVICE_HAND_TRACKER,
@@ -786,7 +791,6 @@ enum xrt_device_type
 	XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER,
 	XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER,
 	XRT_DEVICE_TYPE_ANY_HAND_CONTROLLER,
-	XRT_DEVICE_TYPE_GAMEPAD,
 	XRT_DEVICE_TYPE_GENERIC_TRACKER,
 	XRT_DEVICE_TYPE_HAND_TRACKER,
 	XRT_DEVICE_TYPE_EYE_TRACKER,
@@ -880,21 +884,19 @@ enum xrt_input_type
 	/** Standard pose used for rendering */  \
 	_(XRT_INPUT_GENERIC_HEAD_POSE                      , XRT_INPUT_NAME(0x0000, POSE)) \
 	_(XRT_INPUT_GENERIC_HEAD_DETECT                    , XRT_INPUT_NAME(0x0001, BOOLEAN)) \
-	_(XRT_INPUT_HT_UNOBSTRUCTED_LEFT                   , XRT_INPUT_NAME(0x0002, HAND_TRACKING)) \
-	_(XRT_INPUT_HT_UNOBSTRUCTED_RIGHT                  , XRT_INPUT_NAME(0x0003, HAND_TRACKING)) \
-	_(XRT_INPUT_HT_CONFORMING_LEFT                     , XRT_INPUT_NAME(0x0004, HAND_TRACKING)) \
-	_(XRT_INPUT_HT_CONFORMING_RIGHT                    , XRT_INPUT_NAME(0x0005, HAND_TRACKING)) \
-	_(XRT_INPUT_GENERIC_TRACKER_POSE                   , XRT_INPUT_NAME(0x0006, POSE)) \
+	_(XRT_INPUT_GENERIC_HAND_TRACKING_LEFT             , XRT_INPUT_NAME(0x0002, HAND_TRACKING)) \
+	_(XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT            , XRT_INPUT_NAME(0x0004, HAND_TRACKING)) \
+	_(XRT_INPUT_GENERIC_TRACKER_POSE                   , XRT_INPUT_NAME(0x0005, POSE)) \
 	/** XR_EXT_palm_pose */ \
-	_(XRT_INPUT_GENERIC_PALM_POSE                      , XRT_INPUT_NAME(0x0007, POSE)) \
+	_(XRT_INPUT_GENERIC_PALM_POSE                      , XRT_INPUT_NAME(0x0006, POSE)) \
 \
 	/** XR_EXT_eye_gaze_interaction */ \
-	_(XRT_INPUT_GENERIC_EYE_GAZE_POSE                  , XRT_INPUT_NAME(0x0008, POSE)) \
+	_(XRT_INPUT_GENERIC_EYE_GAZE_POSE                  , XRT_INPUT_NAME(0x0007, POSE)) \
 	/** Standard non-view reference spaces */ \
-	_(XRT_INPUT_GENERIC_LOCAL_SPACE_POSE               , XRT_INPUT_NAME(0x0009, POSE)) \
-	_(XRT_INPUT_GENERIC_LOCAL_FLOOR_SPACE_POSE         , XRT_INPUT_NAME(0x000A, POSE)) \
-	_(XRT_INPUT_GENERIC_STAGE_SPACE_POSE               , XRT_INPUT_NAME(0x000B, POSE)) \
-	_(XRT_INPUT_GENERIC_UNBOUNDED_SPACE_POSE           , XRT_INPUT_NAME(0x000C, POSE)) \
+	_(XRT_INPUT_GENERIC_LOCAL_SPACE_POSE               , XRT_INPUT_NAME(0x0008, POSE)) \
+	_(XRT_INPUT_GENERIC_LOCAL_FLOOR_SPACE_POSE         , XRT_INPUT_NAME(0x0009, POSE)) \
+	_(XRT_INPUT_GENERIC_STAGE_SPACE_POSE               , XRT_INPUT_NAME(0x000A, POSE)) \
+	_(XRT_INPUT_GENERIC_UNBOUNDED_SPACE_POSE           , XRT_INPUT_NAME(0x000B, POSE)) \
 \
 	_(XRT_INPUT_SIMPLE_SELECT_CLICK                    , XRT_INPUT_NAME(0x0010, BOOLEAN)) \
 	_(XRT_INPUT_SIMPLE_MENU_CLICK                      , XRT_INPUT_NAME(0x0011, BOOLEAN)) \
@@ -1150,7 +1152,6 @@ enum xrt_input_type
 \
 	_(XRT_INPUT_GENERIC_BODY_TRACKING                  , XRT_INPUT_NAME(0x0700, BODY_TRACKING)) \
 	_(XRT_INPUT_FB_BODY_TRACKING                       , XRT_INPUT_NAME(0x0701, BODY_TRACKING)) \
-	_(XRT_INPUT_META_FULL_BODY_TRACKING                , XRT_INPUT_NAME(0x0702, BODY_TRACKING)) \
 \
 	_(XRT_INPUT_PICO_NEO3_X_CLICK                      , XRT_INPUT_NAME(0x0800, BOOLEAN)) \
 	_(XRT_INPUT_PICO_NEO3_X_TOUCH                      , XRT_INPUT_NAME(0x0801, BOOLEAN)) \
@@ -1287,17 +1288,7 @@ enum xrt_input_type
 	_(XRT_INPUT_TOUCH_PLUS_AIM_POSE                    , XRT_INPUT_NAME(0x0E14, POSE)) \
 	_(XRT_INPUT_TOUCH_PLUS_THUMB_PROXIMITY             , XRT_INPUT_NAME(0x0E15, BOOLEAN)) \
 	_(XRT_INPUT_TOUCH_PLUS_TRIGGER_CURL                , XRT_INPUT_NAME(0x0E16, VEC1_ZERO_TO_ONE)) \
-	_(XRT_INPUT_TOUCH_PLUS_TRIGGER_SLIDE               , XRT_INPUT_NAME(0x0E17, VEC1_ZERO_TO_ONE)) \
-\
-	_(XRT_INPUT_RIFT_REMOTE_SELECT_CLICK               , XRT_INPUT_NAME(0x0F00, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_BACK_CLICK                 , XRT_INPUT_NAME(0x0F01, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_VOLUME_UP_CLICK            , XRT_INPUT_NAME(0x0F02, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_VOLUME_DOWN_CLICK          , XRT_INPUT_NAME(0x0F03, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_OCULUS_CLICK               , XRT_INPUT_NAME(0x0F04, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_DPAD_DOWN_CLICK            , XRT_INPUT_NAME(0x0F05, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_DPAD_RIGHT_CLICK           , XRT_INPUT_NAME(0x0F06, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_DPAD_UP_CLICK              , XRT_INPUT_NAME(0x0F07, BOOLEAN)) \
-	_(XRT_INPUT_RIFT_REMOTE_DPAD_LEFT_CLICK            , XRT_INPUT_NAME(0x0F08, BOOLEAN))
+	_(XRT_INPUT_TOUCH_PLUS_TRIGGER_SLIDE               , XRT_INPUT_NAME(0x0E17, VEC1_ZERO_TO_ONE))
 
 // clang-format on
 
@@ -1746,104 +1737,11 @@ enum xrt_body_joint_fb
 	XRT_BODY_JOINT_NONE_FB = -1,
 };
 
-// XR_META_body_tracking_full_body
-enum xrt_full_body_joint_meta
-{
-	XRT_FULL_BODY_JOINT_ROOT_META = 0,
-	XRT_FULL_BODY_JOINT_HIPS_META = 1,
-	XRT_FULL_BODY_JOINT_SPINE_LOWER_META = 2,
-	XRT_FULL_BODY_JOINT_SPINE_MIDDLE_META = 3,
-	XRT_FULL_BODY_JOINT_SPINE_UPPER_META = 4,
-	XRT_FULL_BODY_JOINT_CHEST_META = 5,
-	XRT_FULL_BODY_JOINT_NECK_META = 6,
-	XRT_FULL_BODY_JOINT_HEAD_META = 7,
-	XRT_FULL_BODY_JOINT_LEFT_SHOULDER_META = 8,
-	XRT_FULL_BODY_JOINT_LEFT_SCAPULA_META = 9,
-	XRT_FULL_BODY_JOINT_LEFT_ARM_UPPER_META = 10,
-	XRT_FULL_BODY_JOINT_LEFT_ARM_LOWER_META = 11,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_WRIST_TWIST_META = 12,
-	XRT_FULL_BODY_JOINT_RIGHT_SHOULDER_META = 13,
-	XRT_FULL_BODY_JOINT_RIGHT_SCAPULA_META = 14,
-	XRT_FULL_BODY_JOINT_RIGHT_ARM_UPPER_META = 15,
-	XRT_FULL_BODY_JOINT_RIGHT_ARM_LOWER_META = 16,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_WRIST_TWIST_META = 17,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_PALM_META = 18,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_WRIST_META = 19,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_THUMB_METACARPAL_META = 20,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_THUMB_PROXIMAL_META = 21,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_THUMB_DISTAL_META = 22,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_THUMB_TIP_META = 23,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_INDEX_METACARPAL_META = 24,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_INDEX_PROXIMAL_META = 25,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_INDEX_INTERMEDIATE_META = 26,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_INDEX_DISTAL_META = 27,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_INDEX_TIP_META = 28,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_MIDDLE_METACARPAL_META = 29,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_MIDDLE_PROXIMAL_META = 30,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_MIDDLE_INTERMEDIATE_META = 31,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_MIDDLE_DISTAL_META = 32,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_MIDDLE_TIP_META = 33,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_RING_METACARPAL_META = 34,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_RING_PROXIMAL_META = 35,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_RING_INTERMEDIATE_META = 36,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_RING_DISTAL_META = 37,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_RING_TIP_META = 38,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_LITTLE_METACARPAL_META = 39,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_LITTLE_PROXIMAL_META = 40,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_LITTLE_INTERMEDIATE_META = 41,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_LITTLE_DISTAL_META = 42,
-	XRT_FULL_BODY_JOINT_LEFT_HAND_LITTLE_TIP_META = 43,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_PALM_META = 44,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_WRIST_META = 45,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_THUMB_METACARPAL_META = 46,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_THUMB_PROXIMAL_META = 47,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_THUMB_DISTAL_META = 48,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_THUMB_TIP_META = 49,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_INDEX_METACARPAL_META = 50,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_INDEX_PROXIMAL_META = 51,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_INDEX_INTERMEDIATE_META = 52,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_INDEX_DISTAL_META = 53,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_INDEX_TIP_META = 54,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_MIDDLE_METACARPAL_META = 55,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_MIDDLE_PROXIMAL_META = 56,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_MIDDLE_INTERMEDIATE_META = 57,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_MIDDLE_DISTAL_META = 58,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_MIDDLE_TIP_META = 59,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_RING_METACARPAL_META = 60,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_RING_PROXIMAL_META = 61,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_RING_INTERMEDIATE_META = 62,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_RING_DISTAL_META = 63,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_RING_TIP_META = 64,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_LITTLE_METACARPAL_META = 65,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_LITTLE_PROXIMAL_META = 66,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_LITTLE_INTERMEDIATE_META = 67,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_LITTLE_DISTAL_META = 68,
-	XRT_FULL_BODY_JOINT_RIGHT_HAND_LITTLE_TIP_META = 69,
-	XRT_FULL_BODY_JOINT_LEFT_UPPER_LEG_META = 70,
-	XRT_FULL_BODY_JOINT_LEFT_LOWER_LEG_META = 71,
-	XRT_FULL_BODY_JOINT_LEFT_FOOT_ANKLE_TWIST_META = 72,
-	XRT_FULL_BODY_JOINT_LEFT_FOOT_ANKLE_META = 73,
-	XRT_FULL_BODY_JOINT_LEFT_FOOT_SUBTALAR_META = 74,
-	XRT_FULL_BODY_JOINT_LEFT_FOOT_TRANSVERSE_META = 75,
-	XRT_FULL_BODY_JOINT_LEFT_FOOT_BALL_META = 76,
-	XRT_FULL_BODY_JOINT_RIGHT_UPPER_LEG_META = 77,
-	XRT_FULL_BODY_JOINT_RIGHT_LOWER_LEG_META = 78,
-	XRT_FULL_BODY_JOINT_RIGHT_FOOT_ANKLE_TWIST_META = 79,
-	XRT_FULL_BODY_JOINT_RIGHT_FOOT_ANKLE_META = 80,
-	XRT_FULL_BODY_JOINT_RIGHT_FOOT_SUBTALAR_META = 81,
-	XRT_FULL_BODY_JOINT_RIGHT_FOOT_TRANSVERSE_META = 82,
-	XRT_FULL_BODY_JOINT_RIGHT_FOOT_BALL_META = 83,
-	XRT_FULL_BODY_JOINT_COUNT_META = 84,
-	XRT_FULL_BODY_JOINT_NONE_META = 85,
-};
-
 enum xrt_body_joint_set_type_fb
 {
 	XRT_BODY_JOINT_SET_UNKNOWN = 0,
 	// XR_FB_body_tracking
 	XRT_BODY_JOINT_SET_DEFAULT_FB,
-	// XR_Meta_body_tracking_full_body
-	XRT_BODY_JOINT_SET_FULL_BODY_META,
 };
 
 // XR_FB_body_tracking
@@ -1861,20 +1759,12 @@ struct xrt_body_skeleton_fb
 	struct xrt_body_skeleton_joint_fb joints[XRT_BODY_JOINT_COUNT_FB];
 };
 
-// XR_Meta_body_tracking_full_body
-struct xrt_full_body_skeleton_meta
-{
-	// ordered by xrt_full_body_joint_meta
-	struct xrt_body_skeleton_joint_fb joints[XRT_FULL_BODY_JOINT_COUNT_META];
-};
-
 // structure is a container to represent the body skeleton in T-pose including the joint hierarchy,
 // can have info such as skeleton scale and proportions
 struct xrt_body_skeleton
 {
 	union {
 		struct xrt_body_skeleton_fb body_skeleton_fb;
-		struct xrt_full_body_skeleton_meta full_body_skeleton_meta;
 	};
 };
 
@@ -1899,20 +1789,11 @@ struct xrt_body_joint_set_fb
 	struct xrt_body_joint_location_fb joint_locations[XRT_BODY_JOINT_COUNT_FB];
 };
 
-// XR_Meta_body_tracking_full_body
-struct xrt_full_body_joint_set_meta
-{
-	struct xrt_base_body_joint_set_meta base;
-	// ordered by xrt_full_body_joint_meta
-	struct xrt_body_joint_location_fb joint_locations[XRT_FULL_BODY_JOINT_COUNT_META];
-};
-
 struct xrt_body_joint_set
 {
 	union {
 		struct xrt_base_body_joint_set_meta base_body_joint_set_meta;
 		struct xrt_body_joint_set_fb body_joint_set_fb;
-		struct xrt_full_body_joint_set_meta full_body_joint_set_meta;
 	};
 	// in driver global space, without tracking_origin offset
 	struct xrt_space_relation body_pose;
@@ -2127,20 +2008,6 @@ enum xrt_visibility_mask_type
  *
  */
 
-// @note We're not using U_LOG_RAW because we can't include u_logging.h inside xrt_defines.h without causing problems.
-#if 0
-#define XRT_REFERENCE_DEBUG_PRINT(ACTION, PTR, COUNT)                                                                  \
-	do {                                                                                                           \
-		int32_t __count = (COUNT);                                                                             \
-		printf(#ACTION " %p to %u", (void *)(PTR), __count);                                                   \
-		if (__count < 0) {                                                                                     \
-			XRT_DEBUGBREAK();                                                                              \
-		}                                                                                                      \
-	} while (false)
-#else
-#define XRT_REFERENCE_DEBUG_PRINT(ACTION, PTR, COUNT)
-#endif
-
 /*!
  * Increment the reference, probably want @ref xrt_reference_inc_and_was_zero.
  *
@@ -2150,9 +2017,7 @@ enum xrt_visibility_mask_type
 static inline void
 xrt_reference_inc(struct xrt_reference *xref)
 {
-	XRT_MAYBE_UNUSED int32_t count = xrt_atomic_s32_inc_return(&xref->count);
-
-	XRT_REFERENCE_DEBUG_PRINT(Incremented, xref, count);
+	xrt_atomic_s32_inc_return(&xref->count);
 }
 
 /*!
@@ -2164,9 +2029,7 @@ xrt_reference_inc(struct xrt_reference *xref)
 static inline void
 xrt_reference_dec(struct xrt_reference *xref)
 {
-	XRT_MAYBE_UNUSED int32_t count = xrt_atomic_s32_dec_return(&xref->count);
-
-	XRT_REFERENCE_DEBUG_PRINT(Decremented, xref, count);
+	xrt_atomic_s32_dec_return(&xref->count);
 }
 
 /*!
@@ -2179,9 +2042,6 @@ XRT_CHECK_RESULT static inline bool
 xrt_reference_inc_and_was_zero(struct xrt_reference *xref)
 {
 	int32_t count = xrt_atomic_s32_inc_return(&xref->count);
-
-	XRT_REFERENCE_DEBUG_PRINT(Incremented, xref, count);
-
 	return count == 1;
 }
 
@@ -2195,11 +2055,9 @@ XRT_CHECK_RESULT static inline bool
 xrt_reference_dec_and_is_zero(struct xrt_reference *xref)
 {
 	int32_t count = xrt_atomic_s32_dec_return(&xref->count);
-
-	XRT_REFERENCE_DEBUG_PRINT(Decremented, xref, count);
-
 	return count == 0;
 }
+
 
 #ifdef __cplusplus
 }

@@ -12,20 +12,14 @@
 #include "openvr_driver.h"
 #include "util/u_json.hpp"
 
-class Context;
-
 class Settings : public vr::IVRSettings
 {
 private:
 	const xrt::auxiliary::util::json::JSONNode steamvr_settings;
 	const xrt::auxiliary::util::json::JSONNode driver_defaults;
 
-	Context *context;
-
-	float analog_gain;
-
 public:
-	Settings(const std::string &steam_install, const std::string &steamvr_install, Context *context);
+	Settings(const std::string &steam_install, const std::string &steamvr_install);
 
 	const char *
 	GetSettingsErrorNameFromEnum(vr::EVRSettingsError eError) override;

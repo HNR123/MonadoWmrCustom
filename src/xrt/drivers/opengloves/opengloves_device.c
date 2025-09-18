@@ -86,7 +86,7 @@ opengloves_device(struct xrt_device *xdev)
 	return (struct opengloves_device *)xdev;
 }
 
-static xrt_result_t
+static void
 opengloves_device_get_hand_tracking(struct xrt_device *xdev,
                                     enum xrt_input_name name,
                                     int64_t requested_timestamp_ns,
@@ -134,8 +134,6 @@ opengloves_device_get_hand_tracking(struct xrt_device *xdev,
 
 	*out_timestamp_ns = requested_timestamp_ns;
 	out_joint_set->is_active = true;
-
-	return XRT_SUCCESS;
 }
 
 static xrt_result_t
@@ -174,7 +172,7 @@ opengloves_ffb_location_convert(const struct xrt_output_force_feedback *xrt_ffb,
 	}
 }
 
-static xrt_result_t
+static void
 opengloves_device_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
 {
 	struct opengloves_device *od = opengloves_device(xdev);
@@ -194,16 +192,9 @@ opengloves_device_set_output(struct xrt_device *xdev, enum xrt_output_name name,
 		char buff[64];
 		opengloves_alpha_encoding_encode(&out, buff);
 
-		int ret = opengloves_communication_device_write(od->ocd, buff, strlen(buff));
-		if (ret == -1) {
-			return XRT_ERROR_OUTPUT_REQUEST_FAILURE;
-		}
-		return XRT_SUCCESS;
+		opengloves_communication_device_write(od->ocd, buff, strlen(buff));
 	}
-	default:
-		U_LOG_XDEV_UNSUPPORTED_OUTPUT(&od->base, od->log_level, name);
-		return XRT_ERROR_OUTPUT_UNSUPPORTED;
-		break;
+	default: break;
 	}
 }
 
@@ -297,10 +288,10 @@ opengloves_device_create(struct opengloves_communication_device *ocd, enum xrt_h
 	// hand tracking
 	od->base.get_hand_tracking = opengloves_device_get_hand_tracking;
 	od->base.inputs[OPENGLOVES_INPUT_INDEX_HAND_TRACKING].name =
-	    od->hand == XRT_HAND_LEFT ? XRT_INPUT_HT_UNOBSTRUCTED_LEFT : XRT_INPUT_HT_UNOBSTRUCTED_RIGHT;
+	    od->hand == XRT_HAND_LEFT ? XRT_INPUT_GENERIC_HAND_TRACKING_LEFT : XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT;
 
-	od->base.supported.hand_tracking = true;
-	od->base.supported.force_feedback = true;
+	od->base.hand_tracking_supported = true;
+	od->base.force_feedback_supported = true;
 
 	// inputs
 	od->base.update_inputs = opengloves_device_update_inputs;

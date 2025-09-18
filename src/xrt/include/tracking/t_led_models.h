@@ -11,10 +11,6 @@
 #include "math/m_api.h"
 #include "math/m_vec3.h"
 
-#include "util/u_time.h"
-
-#include "xrt/xrt_device.h"
-
 /* This is the angle that Rift CV1 LEDs are visible at. Let's see if
  * it works for other controller types... */
 #define LED_ANGLE 82
@@ -31,11 +27,6 @@ struct t_constellation_led
 	float radius_mm;
 };
 
-struct t_constellation_bounding_point
-{
-	struct xrt_vec3 pos;
-};
-
 struct t_constellation_led_model
 {
 	// Device ID
@@ -48,22 +39,13 @@ struct t_constellation_led_model
 
 	struct t_constellation_led *leds;
 	uint8_t num_leds;
-
-	// bounding box for the device itself, not it's LEDs
-	struct t_constellation_bounding_point *bounding_points;
-	uint8_t num_bounding_points;
-
-	bool (*check_led_visibility)(struct t_constellation_led_model *led_model,
-	                             size_t led_index,
-	                             struct xrt_vec3 T_obj_cam);
 };
 
 void
 t_constellation_led_model_init(uint8_t device_id,
                                struct xrt_pose *P_device_model,
                                struct t_constellation_led_model *led_model,
-                               uint8_t num_leds,
-                               uint8_t num_bounding_points);
+                               uint8_t num_leds);
 void
 t_constellation_led_model_dump(struct t_constellation_led_model *led_model, const char *desc);
 void

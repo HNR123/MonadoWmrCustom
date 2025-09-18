@@ -296,7 +296,7 @@ notify_ref_space_usage_device(struct u_space_overseer *uso, enum xrt_reference_s
 		xdev = uso->notify;
 	}
 
-	if (xdev == NULL || !xdev->supported.ref_space_usage) {
+	if (xdev == NULL || !xdev->ref_space_usage_supported) {
 		return;
 	}
 
@@ -605,7 +605,7 @@ locate_spaces(struct xrt_space_overseer *xso,
 	for (uint32_t i = 0; i < space_count; i++) {
 		// spaces are allowed to be NULL
 		if (spaces[i] == NULL) {
-			out_relations[i].relation_flags = XRT_SPACE_RELATION_BITMASK_NONE;
+			out_relations->relation_flags = XRT_SPACE_RELATION_BITMASK_NONE;
 			continue;
 		}
 
@@ -1149,7 +1149,7 @@ u_space_overseer_legacy_setup(struct u_space_overseer *uso,
 	xrt_space_reference(&uso->base.semantic.local, NULL);
 	xrt_space_reference(&uso->base.semantic.unbounded, NULL);
 
-	if (head != NULL && head->supported.stage) {
+	if (head != NULL && head->stage_supported) {
 		// stage poses are polled from the driver
 		u_space_overseer_create_pose_space(uso, head, XRT_INPUT_GENERIC_STAGE_SPACE_POSE,
 		                                   &uso->base.semantic.stage);

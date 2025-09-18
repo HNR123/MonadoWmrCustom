@@ -360,12 +360,11 @@ try_move_assignment(struct xrt_device **xdevs, int *hand, int *other_hand)
 }
 
 void
-u_device_assign_xdev_roles(struct xrt_device **xdevs, size_t xdev_count, int *head, int *left, int *right, int *gamepad)
+u_device_assign_xdev_roles(struct xrt_device **xdevs, size_t xdev_count, int *head, int *left, int *right)
 {
 	*head = XRT_DEVICE_ROLE_UNASSIGNED;
 	*left = XRT_DEVICE_ROLE_UNASSIGNED;
 	*right = XRT_DEVICE_ROLE_UNASSIGNED;
-	*gamepad = XRT_DEVICE_ROLE_UNASSIGNED;
 	assert(xdev_count < INT_MAX);
 
 	for (size_t i = 0; i < xdev_count; i++) {
@@ -389,11 +388,6 @@ u_device_assign_xdev_roles(struct xrt_device **xdevs, size_t xdev_count, int *he
 			try_move_assignment(xdevs, right, left);
 			if (*right == XRT_DEVICE_ROLE_UNASSIGNED) {
 				*right = (int)i;
-			}
-			break;
-		case XRT_DEVICE_TYPE_GAMEPAD:
-			if (*gamepad == XRT_DEVICE_ROLE_UNASSIGNED) {
-				*gamepad = (int)i;
 			}
 			break;
 		case XRT_DEVICE_TYPE_ANY_HAND_CONTROLLER:
@@ -457,7 +451,7 @@ u_device_get_view_pose(const struct xrt_vec3 *eye_relation, uint32_t view_index,
  *
  */
 
-xrt_result_t
+void
 u_device_get_view_poses(struct xrt_device *xdev,
                         const struct xrt_vec3 *default_eye_relation,
                         int64_t at_timestamp_ns,
@@ -466,11 +460,7 @@ u_device_get_view_poses(struct xrt_device *xdev,
                         struct xrt_fov *out_fovs,
                         struct xrt_pose *out_poses)
 {
-	xrt_result_t xret =
-	    xrt_device_get_tracked_pose(xdev, XRT_INPUT_GENERIC_HEAD_POSE, at_timestamp_ns, out_head_relation);
-	if (xret != XRT_SUCCESS) {
-		return xret;
-	}
+	xrt_device_get_tracked_pose(xdev, XRT_INPUT_GENERIC_HEAD_POSE, at_timestamp_ns, out_head_relation);
 
 	for (uint32_t i = 0; i < view_count && i < ARRAY_SIZE(xdev->hmd->views); i++) {
 		out_fovs[i] = xdev->hmd->distortion.fov[i];
@@ -479,8 +469,6 @@ u_device_get_view_poses(struct xrt_device *xdev,
 	for (uint32_t i = 0; i < view_count; i++) {
 		u_device_get_view_pose(default_eye_relation, i, &out_poses[i]);
 	}
-
-	return XRT_SUCCESS;
 }
 
 xrt_result_t
@@ -516,25 +504,23 @@ u_device_noop_update_inputs(struct xrt_device *xdev)
 
 #define E(FN) U_LOG_E("Function " #FN " is not implemented for '%s'", xdev->str)
 
-xrt_result_t
+void
 u_device_ni_get_hand_tracking(struct xrt_device *xdev,
                               enum xrt_input_name name,
-                              int64_t desired_timestamp_ns,
+                              uint64_t desired_timestamp_ns,
                               struct xrt_hand_joint_set *out_value,
-                              int64_t *out_timestamp_ns)
+                              uint64_t *out_timestamp_ns)
 {
 	E(get_hand_tracking);
-	return XRT_ERROR_NOT_IMPLEMENTED;
 }
 
-xrt_result_t
+void
 u_device_ni_set_output(struct xrt_device *xdev, enum xrt_output_name name, const struct xrt_output_value *value)
 {
-	E(set_output);
-	return XRT_ERROR_NOT_IMPLEMENTED;
+	E(get_hand_tracking);
 }
 
-xrt_result_t
+void
 u_device_ni_get_view_poses(struct xrt_device *xdev,
                            const struct xrt_vec3 *default_eye_relation,
                            int64_t at_timestamp_ns,
@@ -543,8 +529,7 @@ u_device_ni_get_view_poses(struct xrt_device *xdev,
                            struct xrt_fov *out_fovs,
                            struct xrt_pose *out_poses)
 {
-	E(get_view_poses);
-	return XRT_ERROR_NOT_IMPLEMENTED;
+	E(get_hand_tracking);
 }
 
 bool

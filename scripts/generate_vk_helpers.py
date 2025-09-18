@@ -165,8 +165,6 @@ def get_device_cmds():
             requires=("VK_USE_PLATFORM_ANDROID_KHR",),
         ),
         None,
-        Cmd('vkGetMemoryHostPointerPropertiesEXT', requires=("VK_EXT_external_memory_host",)),
-        None,
         Cmd("vkGetCalibratedTimestampsEXT", requires=("VK_EXT_calibrated_timestamps",)),
         None,
         Cmd("vkGetPastPresentationTimingGOOGLE"),
@@ -185,8 +183,6 @@ def get_device_cmds():
         Cmd("vkQueueInsertDebugUtilsLabelEXT", requires=("VK_EXT_debug_utils",)),
         Cmd("vkSetDebugUtilsObjectNameEXT", requires=("VK_EXT_debug_utils",)),
         Cmd("vkSetDebugUtilsObjectTagEXT", requires=("VK_EXT_debug_utils",)),
-        None,
-        Cmd("vkWaitForPresentKHR", requires=("VK_KHR_present_wait",)),
     ]
 
 
@@ -286,7 +282,6 @@ def get_instance_cmds():
 
 # Sorted KHR, EXT, Vendor, interally alphabetically
 INSTANCE_EXTENSIONS_TO_CHECK = [
-    "VK_KHR_external_memory_capabilities",
     "VK_EXT_display_surface_counter",
     "VK_EXT_swapchain_colorspace",
     "VK_EXT_debug_utils",
@@ -295,7 +290,6 @@ INSTANCE_EXTENSIONS_TO_CHECK = [
 DEVICE_EXTENSIONS_TO_CHECK = [
     "VK_KHR_8bit_storage",
     "VK_KHR_external_fence_fd",
-    "VK_KHR_external_memory",
     "VK_KHR_external_semaphore_fd",
     "VK_KHR_format_feature_flags2",
     "VK_KHR_global_priority",
@@ -304,13 +298,11 @@ DEVICE_EXTENSIONS_TO_CHECK = [
     "VK_KHR_maintenance2",
     "VK_KHR_maintenance3",
     "VK_KHR_maintenance4",
-    "VK_KHR_present_wait",
     "VK_KHR_synchronization2",
     "VK_KHR_timeline_semaphore",
     "VK_EXT_calibrated_timestamps",
     "VK_EXT_display_control",
     "VK_EXT_external_memory_dma_buf",
-    "VK_EXT_external_memory_host",
     "VK_EXT_global_priority",
     "VK_EXT_image_drm_format_modifier",
     "VK_EXT_robustness2",
@@ -372,18 +364,17 @@ class ConditionalGenerator:
     def __init__(self):
         self.current_condition = None
 
-    def process_condition(self, new_condition: Optional[str], finish: bool = False) -> Optional[str]:
+    def process_condition(self, new_condition: Optional[str]) -> Optional[str]:
         """Return a line (or lines) to yield if required based on the new condition state."""
         lines = []
         if self.current_condition and new_condition != self.current_condition:
             # Close current condition if required.
             lines.append("#endif // {}".format(self.current_condition))
-            if not finish:
-                # empty line
-                lines.append("")
+            # empty line
+            lines.append("")
             self.current_condition = None
 
-        if not finish and new_condition != self.current_condition:
+        if new_condition != self.current_condition:
             # Open new condition if required
             lines.append("#if {}".format(new_condition))
             self.current_condition = new_condition
@@ -393,7 +384,7 @@ class ConditionalGenerator:
 
     def finish(self) -> Optional[str]:
         """Return a line (or lines) to yield if required at the end of the loop."""
-        return self.process_condition(None, finish=True)
+        return self.process_condition(None)
 
 
 def generate_per_command(
@@ -422,8 +413,7 @@ def generate_structure_members(commands: List[Cmd]):
     def per_command(cmd: Cmd):
         return "\tPFN_{} {};".format(cmd.name, cmd.member_name)
 
-    yield from generate_per_command(commands, per_command)
-    yield ''
+    return generate_per_command(commands, per_command)
 
 
 def generate_proc_macro(macro: str, commands: List[Cmd]):

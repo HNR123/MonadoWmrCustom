@@ -25,7 +25,6 @@
 #include "xrt/xrt_byte_order.h"
 
 #include "math/m_api.h"
-#include "math/m_filter_one_euro.h"
 #include "math/m_relation_history.h"
 #include "math/m_space.h"
 
@@ -111,12 +110,8 @@ static const uint8_t HYDRA_REPORT_START_GAMEPAD[] = {
 
 struct hydra_controller_state
 {
+	struct m_relation_history_filters motion_vector_filters;
 	struct m_relation_history *relation_history;
-	struct
-	{
-		struct m_filter_euro_vec3 position;
-		struct m_filter_euro_quat orientation;
-	} motion_vector_filters;
 
 	struct xrt_vec2 js;
 	float trigger;
@@ -336,11 +331,7 @@ hydra_device_parse_controller(struct hydra_device *hd, uint8_t *buf, int64_t now
 	pose.orientation = fixed;
 
 	struct xrt_space_relation space_relation = {0};
-	m_filter_euro_vec3_run(&state->motion_vector_filters.position, now, &pose.position,
-	                       &space_relation.pose.position);
-	m_filter_euro_quat_run(&state->motion_vector_filters.orientation, now, &pose.orientation,
-	                       &space_relation.pose.orientation);
-
+	space_relation.pose = pose;
 	space_relation.relation_flags =
 	    (XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_ORIENTATION_VALID_BIT) |
 	    (XRT_SPACE_RELATION_POSITION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT);
@@ -802,7 +793,7 @@ hydra_found(struct xrt_prober *xp,
 		hd->base.destroy = hydra_device_destroy;
 		hd->base.update_inputs = hydra_device_update_inputs;
 		hd->base.get_tracked_pose = hydra_device_get_tracked_pose;
-		hd->base.set_output = u_device_ni_set_output;
+		// hs->base.set_output = hydra_device_set_output;
 		hd->base.name = XRT_DEVICE_HYDRA;
 		snprintf(hd->base.str, XRT_DEVICE_NAME_LEN, "%s %i", "Razer Hydra Controller", (int)(i + 1));
 		snprintf(hd->base.serial, XRT_DEVICE_NAME_LEN, "%s%i", "RZRHDRC", (int)(i + 1));
@@ -820,22 +811,22 @@ hydra_found(struct xrt_prober *xp,
 		hd->index = i;
 		hd->sys = hs;
 
-		const float fc_min = 9.f;
-		const float fc_min_d = 9.f;
-		const float beta = 0.1f;
+		const float fc_min = 1.0;
+		const float fc_min_d = 1.0;
+		const float beta = 0.007;
 
 		m_filter_euro_vec3_init(&hd->state.motion_vector_filters.position, fc_min, fc_min_d, beta);
 		m_filter_euro_quat_init(&hd->state.motion_vector_filters.orientation, fc_min, fc_min_d, beta);
 
-		m_relation_history_create(&hd->state.relation_history);
+		m_relation_history_create(&hd->state.relation_history, &hd->state.motion_vector_filters);
 
 		hd->base.binding_profiles = binding_profiles;
 		hd->base.binding_profile_count = ARRAY_SIZE(binding_profiles);
 
 		hd->base.tracking_origin = &hs->base;
 
-		hd->base.supported.position_tracking = true;
-		hd->base.supported.orientation_tracking = true;
+		hd->base.position_tracking_supported = true;
+		hd->base.orientation_tracking_supported = true;
 		hd->base.device_type = XRT_DEVICE_TYPE_ANY_HAND_CONTROLLER;
 
 		out_xdevs[i] = &(hd->base);

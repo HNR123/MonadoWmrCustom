@@ -406,6 +406,18 @@ rs_ddev_get_tracked_pose(struct xrt_device *xdev,
 }
 
 static void
+rs_ddev_get_view_poses(struct xrt_device *xdev,
+                       const struct xrt_vec3 *default_eye_relation,
+                       int64_t at_timestamp_ns,
+                       uint32_t view_count,
+                       struct xrt_space_relation *out_head_relation,
+                       struct xrt_fov *out_fovs,
+                       struct xrt_pose *out_poses)
+{
+	assert(false);
+}
+
+static void
 rs_ddev_destroy(struct xrt_device *xdev)
 {
 	struct rs_ddev *rs = rs_ddev(xdev);
@@ -432,7 +444,7 @@ rs_ddev_create(int device_idx)
 {
 	struct rs_ddev *rs = U_DEVICE_ALLOCATE(struct rs_ddev, U_DEVICE_ALLOC_TRACKING_NONE, 1, 0);
 
-	m_relation_history_create(&rs->relation_hist);
+	m_relation_history_create(&rs->relation_hist, NULL);
 
 	rs->enable_mapping = true;
 	rs->enable_pose_jumping = true;
@@ -450,7 +462,7 @@ rs_ddev_create(int device_idx)
 	        rs->enable_relocalization, rs->enable_pose_prediction, rs->enable_pose_filtering);
 	rs->base.update_inputs = u_device_noop_update_inputs;
 	rs->base.get_tracked_pose = rs_ddev_get_tracked_pose;
-	rs->base.get_view_poses = u_device_ni_get_view_poses;
+	rs->base.get_view_poses = rs_ddev_get_view_poses;
 	rs->base.destroy = rs_ddev_destroy;
 	rs->base.name = XRT_DEVICE_REALSENSE;
 	rs->base.tracking_origin->type = XRT_TRACKING_TYPE_EXTERNAL_SLAM;
@@ -486,8 +498,8 @@ rs_ddev_create(int device_idx)
 		return NULL;
 	}
 
-	rs->base.supported.orientation_tracking = true;
-	rs->base.supported.position_tracking = true;
+	rs->base.orientation_tracking_supported = true;
+	rs->base.position_tracking_supported = true;
 	rs->base.device_type = XRT_DEVICE_TYPE_GENERIC_TRACKER;
 
 	return &rs->base;

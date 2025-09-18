@@ -364,7 +364,7 @@ vive_controller_device_index_update_inputs(struct xrt_device *xdev)
 	return XRT_SUCCESS;
 }
 
-static xrt_result_t
+static void
 vive_controller_get_hand_tracking(struct xrt_device *xdev,
                                   enum xrt_input_name name,
                                   int64_t requested_timestamp_ns,
@@ -375,9 +375,9 @@ vive_controller_get_hand_tracking(struct xrt_device *xdev,
 
 	struct vive_controller_device *d = vive_controller_device(xdev);
 
-	if (name != XRT_INPUT_HT_CONFORMING_LEFT && name != XRT_INPUT_HT_CONFORMING_RIGHT) {
-		U_LOG_XDEV_UNSUPPORTED_INPUT(&d->base, d->log_level, name);
-		return XRT_ERROR_INPUT_UNSUPPORTED;
+	if (name != XRT_INPUT_GENERIC_HAND_TRACKING_LEFT && name != XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT) {
+		VIVE_ERROR(d, "unknown input name for hand tracker");
+		return;
 	}
 
 	enum xrt_hand hand = d->config.variant == CONTROLLER_INDEX_LEFT ? XRT_HAND_LEFT : XRT_HAND_RIGHT;
@@ -408,7 +408,6 @@ vive_controller_get_hand_tracking(struct xrt_device *xdev,
 	*out_timestamp_ns = requested_timestamp_ns;
 
 	out_value->is_active = true;
-	return XRT_SUCCESS;
 }
 
 static xrt_result_t
@@ -487,7 +486,7 @@ vive_controller_haptic_pulse(struct vive_controller_device *d, const struct xrt_
 	return os_hid_set_feature(d->controller_hid, (uint8_t *)&report, sizeof(report));
 }
 
-static xrt_result_t
+static void
 vive_controller_device_set_output(struct xrt_device *xdev,
                                   enum xrt_output_name name,
                                   const struct xrt_output_value *value)
@@ -495,17 +494,18 @@ vive_controller_device_set_output(struct xrt_device *xdev,
 	struct vive_controller_device *d = vive_controller_device(xdev);
 
 	if (name != XRT_OUTPUT_NAME_VIVE_HAPTIC && name != XRT_OUTPUT_NAME_INDEX_HAPTIC) {
-		U_LOG_XDEV_UNSUPPORTED_OUTPUT(&d->base, d->log_level, name);
-		return XRT_ERROR_OUTPUT_UNSUPPORTED;
+		VIVE_ERROR(d, "Unknown output\n");
+		return;
 	}
 
-	if (value->vibration.amplitude > 0.01) {
-		os_mutex_lock(&d->lock);
-		vive_controller_haptic_pulse(d, value);
-		os_mutex_unlock(&d->lock);
+	bool pulse = value->vibration.amplitude > 0.01;
+	if (!pulse) {
+		return;
 	}
 
-	return XRT_SUCCESS;
+	os_mutex_lock(&d->lock);
+	vive_controller_haptic_pulse(d, value);
+	os_mutex_unlock(&d->lock);
 }
 
 
@@ -1063,11 +1063,11 @@ vive_controller_create(struct os_hid_device *controller_hid, enum watchman_gen w
 	d->watchman_gen = watchman_gen;
 
 	m_imu_3dof_init(&d->fusion.i3dof, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
-	m_relation_history_create(&d->fusion.relation_hist);
+	m_relation_history_create(&d->fusion.relation_hist, NULL);
 	int ret = os_mutex_init(&d->fusion.mutex);
 	if (ret != 0) {
 		VIVE_ERROR(d, "Failed to init 3dof mutex");
-		return NULL;
+		return false;
 	}
 
 	/* default values, will be queried from device */
@@ -1181,11 +1181,11 @@ vive_controller_create(struct os_hid_device *controller_hid, enum watchman_gen w
 
 		if (d->config.variant == CONTROLLER_INDEX_LEFT) {
 			d->base.device_type = XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER;
-			d->base.inputs[VIVE_CONTROLLER_HAND_TRACKING].name = XRT_INPUT_HT_CONFORMING_LEFT;
+			d->base.inputs[VIVE_CONTROLLER_HAND_TRACKING].name = XRT_INPUT_GENERIC_HAND_TRACKING_LEFT;
 			snprintf(d->base.str, XRT_DEVICE_NAME_LEN, "Valve Index Left Controller (vive)");
 		} else if (d->config.variant == CONTROLLER_INDEX_RIGHT) {
 			d->base.device_type = XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER;
-			d->base.inputs[VIVE_CONTROLLER_HAND_TRACKING].name = XRT_INPUT_HT_CONFORMING_RIGHT;
+			d->base.inputs[VIVE_CONTROLLER_HAND_TRACKING].name = XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT;
 			snprintf(d->base.str, XRT_DEVICE_NAME_LEN, "Valve Index Right Controller (vive)");
 		}
 	} else if (d->config.variant == CONTROLLER_TRACKER_GEN1) {
@@ -1224,9 +1224,9 @@ vive_controller_create(struct os_hid_device *controller_hid, enum watchman_gen w
 	}
 
 	VIVE_DEBUG(d, "Opened vive controller!\n");
-	d->base.supported.orientation_tracking = true;
-	d->base.supported.position_tracking = false;
-	d->base.supported.hand_tracking =
+	d->base.orientation_tracking_supported = true;
+	d->base.position_tracking_supported = false;
+	d->base.hand_tracking_supported =
 	    d->config.variant == CONTROLLER_INDEX_LEFT || d->config.variant == CONTROLLER_INDEX_RIGHT;
 
 	vive_controller_setup_ui(d);

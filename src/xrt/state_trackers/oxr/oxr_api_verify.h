@@ -304,28 +304,6 @@ struct oxr_subaction_paths;
 		}                                                                                                      \
 	} while (false)
 
-#define OXR_VERIFY_FORM_FACTOR(log, form_factor)                                                                       \
-	do {                                                                                                           \
-		XrFormFactor _form_factor = (form_factor);                                                             \
-		if (_form_factor != XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY &&                                             \
-		    _form_factor != XR_FORM_FACTOR_HANDHELD_DISPLAY) {                                                 \
-                                                                                                                       \
-			return oxr_error(log, XR_ERROR_FORM_FACTOR_UNSUPPORTED,                                        \
-			                 "(" #form_factor " == 0x%08x) is not a valid form factor", _form_factor);     \
-		}                                                                                                      \
-	} while (false)
-
-#define OXR_VERIFY_HAND_TRACKING_DATA_SOURCE_OR_NULL(log, data_source_info)                                            \
-	do {                                                                                                           \
-		if (data_source_info != NULL) {                                                                        \
-			XrResult verify_ret = oxr_verify_XrHandTrackingDataSourceInfoEXT(log, data_source_info);       \
-			if (verify_ret != XR_SUCCESS) {                                                                \
-				return verify_ret;                                                                     \
-			}                                                                                              \
-		}                                                                                                      \
-	} while (false)
-
-
 /*
  *
  * Implementation in oxr_verify.cpp
@@ -419,10 +397,10 @@ XrResult
 oxr_verify_XrGraphicsBindingVulkanKHR(struct oxr_logger * /*log*/, const XrGraphicsBindingVulkanKHR * /*next*/);
 #endif // defined(XR_USE_GRAPHICS_API_VULKAN)
 
-#if defined(XR_USE_PLATFORM_EGL)
+#if defined(XR_USE_PLATFORM_EGL) && defined(XR_USE_GRAPHICS_API_OPENGL)
 XrResult
 oxr_verify_XrGraphicsBindingEGLMNDX(struct oxr_logger *log, const XrGraphicsBindingEGLMNDX *next);
-#endif // defined(XR_USE_PLATFORM_EGL)
+#endif // defined(XR_USE_PLATFORM_EGL) && defined(XR_USE_GRAPHICS_API_OPENGL)
 
 #if defined(XR_USE_PLATFORM_ANDROID) && defined(XR_USE_GRAPHICS_API_OPENGL_ES)
 XrResult
@@ -446,11 +424,6 @@ oxr_verify_XrInteractionProfileDpadBindingEXT(struct oxr_logger *,
                                               const XrInteractionProfileDpadBindingEXT *,
                                               const char *error_prefix);
 #endif // XR_EXT_dpad_binding
-
-#ifdef OXR_HAVE_EXT_hand_tracking_data_source
-XrResult
-oxr_verify_XrHandTrackingDataSourceInfoEXT(struct oxr_logger *, const XrHandTrackingDataSourceInfoEXT *);
-#endif // XR_EXT_hand_tracking_data_source
 
 /*!
  * @}

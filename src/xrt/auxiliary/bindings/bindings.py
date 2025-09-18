@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # Copyright 2020-2023, Collabora, Ltd.
-# Copyright 2024-2025, NVIDIA CORPORATION.
 # SPDX-License-Identifier: BSL-1.0
 """Generate code from a JSON file describing interaction profiles and
 bindings."""
@@ -824,10 +823,8 @@ def generate_bindings_c(file, b):
     # special cased bindings that are never directly used in the input profiles
     inputs.add("XRT_INPUT_GENERIC_HEAD_POSE")
     inputs.add("XRT_INPUT_GENERIC_HEAD_DETECT")
-    inputs.add("XRT_INPUT_HT_UNOBSTRUCTED_LEFT")
-    inputs.add("XRT_INPUT_HT_UNOBSTRUCTED_RIGHT")
-    inputs.add("XRT_INPUT_HT_CONFORMING_LEFT")
-    inputs.add("XRT_INPUT_HT_CONFORMING_RIGHT")
+    inputs.add("XRT_INPUT_GENERIC_HAND_TRACKING_LEFT")
+    inputs.add("XRT_INPUT_GENERIC_HAND_TRACKING_RIGHT")
     inputs.add("XRT_INPUT_GENERIC_TRACKER_POSE")
 
     f.write('const char *\n')
@@ -903,11 +900,6 @@ def generate_bindings_h(file, b):
 #include <stddef.h>
 
 #include "xrt/xrt_defines.h"
-
-
-#ifdef __cplusplus
-extern "C" {{
-#endif
 
 typedef uint64_t XrPath; // OpenXR typedef
 typedef uint64_t XrVersion; // OpenXR typedef
@@ -1018,12 +1010,6 @@ extern struct profile_template profile_templates[OXR_BINDINGS_PROFILE_TEMPLATE_C
     f.write('xrt_output_name_enum(const char *output);\n\n')
 
     f.write("\n// clang-format on\n")
-    f.write(f'''
-#ifdef __cplusplus
-}}
-#endif
-''')
-
     f.close()
 
 

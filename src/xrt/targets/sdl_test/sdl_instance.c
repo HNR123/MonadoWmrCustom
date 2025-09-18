@@ -151,7 +151,6 @@ sdl_system_devices_init(struct sdl_program *sp)
 	    head,                               // head
 	    NULL,                               // left
 	    NULL,                               // right
-	    NULL,                               // gamepad
 	    sp->xsysd_base.xdevs,               // xdevs
 	    sp->xsysd_base.xdev_count,          // xdev_count
 	    false,                              // root_is_unbounded

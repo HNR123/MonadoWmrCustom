@@ -85,21 +85,11 @@ struct u_builder_roles_helper
 	struct xrt_device *head;
 	struct xrt_device *left;
 	struct xrt_device *right;
-	struct xrt_device *gamepad;
 
 	struct
 	{
-		struct
-		{
-			struct xrt_device *left;
-			struct xrt_device *right;
-		} unobstructed;
-
-		struct
-		{
-			struct xrt_device *left;
-			struct xrt_device *right;
-		} conforming;
+		struct xrt_device *left;
+		struct xrt_device *right;
 	} hand_tracking;
 };
 
@@ -166,7 +156,6 @@ void
 u_builder_setup_tracking_origins(struct xrt_device *head,
                                  struct xrt_device *left,
                                  struct xrt_device *right,
-                                 struct xrt_device *gamepad,
                                  struct xrt_vec3 *global_tracking_origin_offset);
 
 /*!
@@ -182,7 +171,6 @@ u_builder_create_space_overseer_legacy(struct xrt_session_event_sink *broadcast,
                                        struct xrt_device *head,
                                        struct xrt_device *left,
                                        struct xrt_device *right,
-                                       struct xrt_device *gamepad,
                                        struct xrt_device **xdevs,
                                        uint32_t xdev_count,
                                        bool root_is_unbounded,
