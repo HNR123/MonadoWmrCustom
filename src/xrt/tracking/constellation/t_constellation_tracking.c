@@ -365,7 +365,36 @@ submit_device_pose(struct t_constellation_tracker *ct,
 	                     &cam->camera_model, &num_leds_out, &num_inliers)) {
 		CT_DEBUG(ct, "Camera %d RANSAC-PnP refinement for device %d from %u blobs failed", view_id,
 		         device->led_model.id, view->bwobs->num_blobs);
-	} /*else {
+	} else {
+	CT_DEBUG(ct,
+	         "Camera %d RANSAC-PnP refinement for device %d from %u blobs had %d LEDs with %d inliers. "
+	         "Produced pose %f,%f,%f,%f pos %f,%f,%f",
+	         view_id, device->led_model.id, view->bwobs->num_blobs, num_leds_out, num_inliers,
+	         refine_pose.orientation.x, refine_pose.orientation.y, refine_pose.orientation.z,
+	         refine_pose.orientation.w, refine_pose.position.x, refine_pose.position.y,
+	         refine_pose.position.z);
+
+	if (num_inliers >= 6) {
+		float pos_diff = math_vec3_len(&refine_pose.position, &P_cam_obj->position);
+		float rot_diff = math_quat_angle_between(&refine_pose.orientation, &P_cam_obj->orientation);
+
+		if (pos_diff < 0.05f && rot_diff < (10.0f * (M_PI/180.0f))) {
+			float alpha = 0.2f;
+
+			struct xrt_vec3 new_pos = P_cam_obj->position;
+			struct xrt_vec3 delta = refine_pose.position;
+			math_vec3_subtract(&delta, &new_pos);
+			math_vec3_scalar_mul(alpha, &delta);
+			math_vec3_accum(&delta, &new_pos);
+			P_cam_obj->position = new_pos;
+
+			struct xrt_quat blended;
+			math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, alpha, &blended);
+			*P_cam_obj->orientation = blended;
+			}
+		}
+	}
+	/*else {
 		CT_DEBUG(ct,
 		         "Camera %d RANSAC-PnP refinement for device %d from %u blobs had %d LEDs with %d inliers. "
 		         "Produced pose %f,%f,%f,%f pos %f,%f,%f",
@@ -403,17 +432,19 @@ submit_device_pose(struct t_constellation_tracker *ct,
 // 		P_cam_obj->position = blended_pos;
 //
 // 		math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, beta, &P_cam_obj->orientation);
-	}
-	else {
-		CT_DEBUG(ct,
-		         "Camera %d RANSAC-PnP refinement for device %d from %u blobs had %d LEDs with %d inliers. "
-		         "Produced pose %f,%f,%f,%f pos %f,%f,%f",
-		         view_id, device->led_model.id, view->bwobs->num_blobs, num_leds_out, num_inliers,
-		         refine_pose.orientation.x, refine_pose.orientation.y, refine_pose.orientation.z,
-		         refine_pose.orientation.w, refine_pose.position.x, refine_pose.position.y,
-		         refine_pose.position.z);
-		//*P_cam_obj = refine_pose;
-	}
+//	}
+	// else {
+	// 	CT_DEBUG(ct,
+	// 	         "Camera %d RANSAC-PnP refinement for device %d from %u blobs had %d LEDs with %d inliers. "
+	// 	         "Produced pose %f,%f,%f,%f pos %f,%f,%f",
+	// 	         view_id, device->led_model.id, view->bwobs->num_blobs, num_leds_out, num_inliers,
+	// 	         refine_pose.orientation.x, refine_pose.orientation.y, refine_pose.orientation.z,
+	// 	         refine_pose.orientation.w, refine_pose.position.x, refine_pose.position.y,
+	// 	         refine_pose.position.z);
+	// 	if (num_inliers >= 6) {
+	// 		*P_cam_obj = refine_pose;
+	// 	}
+	// }
 
 	os_mutex_lock(&cam->bw_lock);
 	blobwatch_update_labels(cam->bw, view->bwobs, device->led_model.id);
