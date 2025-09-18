@@ -196,12 +196,32 @@ constellation_tracked_device_connection_notify_frame(struct t_constellation_trac
 
 static void
 constellation_tracked_device_connection_notify_pose(struct t_constellation_tracked_device_connection *ctdc,
-                                                    timepoint_ns frame_mono_ns,
-                                                    const struct xrt_pose *pose)
+						    timepoint_ns frame_mono_ns,
+						    const struct xrt_pose *pose)
 {
+	static struct xrt_pose last_pose = {0}; // behält die letzte Pose im Speicher
+	static bool has_last = false;
+
+	struct xrt_pose smoothed = *pose;
+
+	if (has_last) {
+		float alpha = 0.2f; // Glättungsfaktor, kleiner = stärkeres Glätten
+
+		// Position glätten
+		smoothed.position.x = last_pose.position.x * (1.0f - alpha) + pose->position.x * alpha;
+		smoothed.position.y = last_pose.position.y * (1.0f - alpha) + pose->position.y * alpha;
+		smoothed.position.z = last_pose.position.z * (1.0f - alpha) + pose->position.z * alpha;
+
+		// Orientierung glätten (slerp für Quats)
+		math_quat_slerp(&last_pose.orientation, &pose->orientation, alpha, &smoothed.orientation);
+	}
+
+	last_pose = smoothed;
+	has_last = true;
+
 	os_mutex_lock(&ctdc->lock);
 	if (!ctdc->disconnected && ctdc->cb->push_observed_pose) {
-		ctdc->cb->push_observed_pose(ctdc->xdev, frame_mono_ns, pose);
+		ctdc->cb->push_observed_pose(ctdc->xdev, frame_mono_ns, &smoothed);
 	}
 	os_mutex_unlock(&ctdc->lock);
 }
