@@ -123,6 +123,7 @@ const struct wmr_headset_descriptor headset_map[] = {
     {WMR_HEADSET_DELL_VISOR, "DELL VR118", "Dell Visor", NULL, NULL, NULL},
     {WMR_HEADSET_ACER_AH100, "Acer", "AH100", NULL, NULL, NULL},
     {WMR_HEADSET_ACER_AH101, "Acer", "AH101", NULL, NULL, NULL},
+    {WMR_HEADSET_FUJITSU_FMVHDS1, "Fujitsu", "Fujitsu FMVHDS1", NULL, NULL, NULL},
 };
 const int headset_map_n = sizeof(headset_map) / sizeof(headset_map[0]);
 
@@ -1084,11 +1085,6 @@ wmr_hmd_get_3dof_tracked_pose(struct xrt_device *xdev,
 
 	struct wmr_hmd *wh = wmr_hmd(xdev);
 
-	if (name != XRT_INPUT_GENERIC_HEAD_POSE) {
-		U_LOG_XDEV_UNSUPPORTED_INPUT(&wh->base, wh->log_level, name);
-		return XRT_ERROR_INPUT_UNSUPPORTED;
-	}
-
 	// Variables needed for prediction.
 	uint64_t last_imu_timestamp_ns = 0;
 	struct xrt_space_relation relation = {0};
@@ -1103,16 +1099,16 @@ wmr_hmd_get_3dof_tracked_pose(struct xrt_device *xdev,
 	last_imu_timestamp_ns = wh->fusion.last_imu_timestamp_ns;
 	os_mutex_unlock(&wh->fusion.mutex);
 
-	// No prediction needed.
-	if (at_timestamp_ns < last_imu_timestamp_ns) {
+	// prediction needed.
+	if (at_timestamp_ns > last_imu_timestamp_ns) {
+		uint64_t prediction_ns = at_timestamp_ns - last_imu_timestamp_ns;
+		double prediction_s = time_ns_to_s(prediction_ns);
+
+		m_predict_relation(&relation, prediction_s, out_relation);
+	} else {
 		*out_relation = relation;
-		return XRT_SUCCESS;
 	}
 
-	uint64_t prediction_ns = at_timestamp_ns - last_imu_timestamp_ns;
-	double prediction_s = time_ns_to_s(prediction_ns);
-
-	m_predict_relation(&relation, prediction_s, out_relation);
 	wh->pose = out_relation->pose;
 
 	return XRT_SUCCESS;
@@ -1158,7 +1154,8 @@ wmr_hmd_get_slam_tracked_pose(struct xrt_device *xdev,
 #endif
 	}
 
-	if (wh->tracking.imu2me) {
+	if (name == XRT_INPUT_GENERIC_HEAD_POSE && wh->tracking.imu2me) {
+		/* Move the pose to the middle-eye position for generic head pose, but not for generic tracker pose */
 		math_pose_transform(&wh->pose, &wh->config.sensors.transforms.P_imu_me, &wh->pose);
 	}
 
@@ -1177,6 +1174,12 @@ wmr_hmd_get_tracked_pose(struct xrt_device *xdev,
 	DRV_TRACE_MARKER();
 
 	struct wmr_hmd *wh = wmr_hmd(xdev);
+
+	if (name != XRT_INPUT_GENERIC_HEAD_POSE && name != XRT_INPUT_GENERIC_TRACKER_POSE) {
+		out_relation->pose = (struct xrt_pose)XRT_POSE_IDENTITY;
+		U_LOG_XDEV_UNSUPPORTED_INPUT(&wh->base, wh->log_level, name);
+		return XRT_ERROR_INPUT_UNSUPPORTED;
+	}
 
 	at_timestamp_ns += (int64_t)(wh->tracked_offset_ms.val * (double)U_TIME_1MS_IN_NS);
 
@@ -1397,7 +1400,9 @@ compute_distortion_bounds(struct wmr_hmd *wh,
 XRT_MAYBE_UNUSED static struct t_camera_calibration
 wmr_hmd_get_cam_calib(struct wmr_hmd *wh, int cam_index)
 {
-	struct t_camera_calibration res;
+	struct t_camera_calibration res = {
+	    0,
+	};
 	struct wmr_camera_config *wcalib = wh->config.tcams[cam_index];
 	struct wmr_distortion_6KT *intr = &wcalib->distortion6KT;
 
@@ -1613,6 +1618,52 @@ wmr_hmd_fill_slam_calibration(struct wmr_hmd *wh)
 }
 
 static void
+wmr_hmd_fill_constellation_calibration(struct wmr_hmd *wh)
+{
+/* WMR thresholds for min brightness and min-blob-required magnitude */
+#define BLOB_PIXEL_THRESHOLD_WMR 0x8
+#define BLOB_THRESHOLD_MIN_WMR 0x18
+
+	struct t_constellation_camera_group *out = &wh->tracking.constellation_calib;
+
+	out->cam_count = wh->config.tcam_count;
+
+	// Fill camera 0
+	struct xrt_pose P_imu_c0 = wh->config.sensors.accel.pose;
+	out->cams[0] = (struct t_constellation_camera){.P_imu_cam = P_imu_c0,
+	                                               .roi = wh->config.tcams[0]->roi,
+	                                               .calibration = wmr_hmd_get_cam_calib(wh, 0),
+	                                               .blob_min_threshold = BLOB_PIXEL_THRESHOLD_WMR,
+	                                               .blob_detect_threshold = BLOB_THRESHOLD_MIN_WMR,
+	                                               .slam_tracking_index = 0};
+
+	// Fill remaining cameras
+	for (int i = 1; i < wh->config.tcam_count; i++) {
+		struct xrt_pose P_ci_c0 = wh->config.tcams[i]->pose;
+
+		if (i == 2 || i == 3) {
+			//! @note The calibration json for the reverb G2v2 (the only 4-camera wmr
+			//! headset we know about) has the HT2 and HT3 extrinsics flipped compared
+			//! to the order the third and fourth camera images come from usb.
+			P_ci_c0 = wh->config.tcams[i == 2 ? 3 : 2]->pose;
+		}
+
+		struct xrt_pose P_c0_ci;
+		math_pose_invert(&P_ci_c0, &P_c0_ci);
+
+		struct xrt_pose P_imu_ci;
+		math_pose_transform(&P_imu_c0, &P_c0_ci, &P_imu_ci);
+
+		out->cams[i] = (struct t_constellation_camera){.P_imu_cam = P_imu_ci,
+		                                               .roi = wh->config.tcams[i]->roi,
+		                                               .calibration = wmr_hmd_get_cam_calib(wh, i),
+		                                               .blob_min_threshold = BLOB_PIXEL_THRESHOLD_WMR,
+		                                               .blob_detect_threshold = BLOB_THRESHOLD_MIN_WMR,
+		                                               .slam_tracking_index = i};
+	}
+}
+
+static void
 wmr_hmd_switch_hmd_tracker(void *wh_ptr)
 {
 	DRV_TRACE_MARKER();
@@ -1704,7 +1755,7 @@ wmr_hmd_guess_camera_orientation(struct wmr_hmd *wh)
 static int
 wmr_hmd_hand_track(struct wmr_hmd *wh,
                    struct t_stereo_camera_calibration *stereo_calib,
-                   struct xrt_hand_masks_sink *masks_sink,
+                   struct xrt_device_masks_sink *masks_sink,
                    struct xrt_slam_sinks **out_sinks,
                    struct xrt_device **out_device)
 {
@@ -1865,7 +1916,6 @@ wmr_hmd_setup_trackers(struct wmr_hmd *wh, struct xrt_slam_sinks *out_sinks, str
 	(void)snprintf(wh->gui.hand_status, sizeof(wh->gui.hand_status), "%s", hand_status);
 
 	struct t_stereo_camera_calibration *stereo_calib = wmr_hmd_create_stereo_camera_calib(wh);
-	wmr_hmd_fill_slam_calibration(wh);
 
 	// Initialize 3DoF tracker
 	m_imu_3dof_init(&wh->fusion.i3dof, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
@@ -1883,7 +1933,7 @@ wmr_hmd_setup_trackers(struct wmr_hmd *wh, struct xrt_slam_sinks *out_sinks, str
 	// Initialize hand tracker
 	struct xrt_slam_sinks *hand_sinks = NULL;
 	struct xrt_device *hand_device = NULL;
-	struct xrt_hand_masks_sink *masks_sink = slam_sinks ? slam_sinks->hand_masks : NULL;
+	struct xrt_device_masks_sink *masks_sink = slam_sinks ? slam_sinks->hand_masks : NULL;
 	if (wh->tracking.hand_enabled) {
 		int hand_status = wmr_hmd_hand_track(wh, stereo_calib, masks_sink, &hand_sinks, &hand_device);
 		if (hand_status != 0 || hand_sinks == NULL || hand_device == NULL) {
@@ -1920,10 +1970,14 @@ wmr_hmd_setup_trackers(struct wmr_hmd *wh, struct xrt_slam_sinks *out_sinks, str
 }
 
 static bool
-wmr_hmd_request_controller_status(struct wmr_hmd *wh)
+wmr_hmd_request_controller_status(struct wmr_hmd *wh, int controller_no)
 {
 	DRV_TRACE_MARKER();
-	unsigned char cmd[64] = {WMR_MS_HOLOLENS_MSG_BT_CONTROL, WMR_MS_HOLOLENS_MSG_CONTROLLER_STATUS};
+	unsigned char cmd[64] = {
+	    WMR_MS_HOLOLENS_MSG_BT_CONTROL,
+	    WMR_BT_CONTROL_MSG_ONLINE_STATUS,
+	    controller_no,
+	};
 	return wmr_hmd_send_controller_packet(wh, cmd, sizeof(cmd));
 }
 
@@ -1933,10 +1987,10 @@ wmr_hmd_create(enum wmr_headset_type hmd_type,
                struct os_hid_device *hid_ctrl,
                struct xrt_prober_device *dev_holo,
                enum u_logging_level log_level,
-               struct xrt_device **out_hmd,
+               struct wmr_hmd **out_hmd,
                struct xrt_device **out_handtracker,
-               struct xrt_device **out_left_controller,
-               struct xrt_device **out_right_controller)
+               struct wmr_controller_base **out_left_controller,
+               struct wmr_controller_base **out_right_controller)
 {
 	DRV_TRACE_MARKER();
 
@@ -2107,8 +2161,8 @@ wmr_hmd_create(enum wmr_headset_type hmd_type,
 	// Switch on IMU on the HMD.
 	hololens_sensors_enable_imu(wh);
 
-	// Switch on data streams on the HMD (only cameras for now as IMU is not yet integrated into wmr_source)
-	wh->tracking.source = wmr_source_create(&wh->tracking.xfctx, dev_holo, wh->config);
+	// Compute the slam calibration for SLAM or controller tracking
+	wmr_hmd_fill_slam_calibration(wh);
 
 	struct xrt_slam_sinks sinks = {0};
 	struct xrt_device *hand_device = NULL;
@@ -2118,6 +2172,18 @@ wmr_hmd_create(enum wmr_headset_type hmd_type,
 		wh = NULL;
 		return;
 	}
+
+	// Set up controller 6dof tracker
+	wmr_hmd_fill_constellation_calibration(wh);
+	struct xrt_frame_sink *out_controller_sink = NULL;
+	if (t_constellation_tracker_create(&wh->tracking.xfctx, &wh->base, &wh->tracking.constellation_calib,
+	                                   &wh->controller_tracker, &out_controller_sink,
+	                                   sinks.controller_masks) != 0) {
+		WMR_WARN(wh, "Failed to create Controller Tracker. Controllers will not be 6dof");
+	}
+
+	// Switch on data streams on the HMD (only cameras for now as IMU is not yet integrated into wmr_source)
+	wh->tracking.source = wmr_source_create(&wh->tracking.xfctx, dev_holo, wh->config, out_controller_sink);
 
 	// Stream data source into sinks (if populated)
 	bool stream_started = xrt_fs_slam_stream_start(wh->tracking.source, &sinks);
@@ -2144,7 +2210,7 @@ wmr_hmd_create(enum wmr_headset_type hmd_type,
 		bool have_controller_status = false;
 
 		os_mutex_lock(&wh->controller_status_lock);
-		if (wmr_hmd_request_controller_status(wh)) {
+		if (wmr_hmd_request_controller_status(wh, 0) && wmr_hmd_request_controller_status(wh, 1)) {
 			/* @todo: Add a timed version of os_cond_wait and a timeout? */
 			/* This will be signalled from the reader thread */
 			while (!wh->have_left_controller_status && !wh->have_right_controller_status) {
@@ -2161,7 +2227,7 @@ wmr_hmd_create(enum wmr_headset_type hmd_type,
 
 	wmr_hmd_setup_ui(wh);
 
-	*out_hmd = &wh->base;
+	*out_hmd = wh;
 	*out_handtracker = hand_device;
 
 	os_mutex_lock(&wh->controller_status_lock);
@@ -2199,4 +2265,15 @@ wmr_hmd_read_sync_from_controller(struct wmr_hmd *hmd, uint8_t *buffer, uint32_t
 	os_mutex_unlock(&hmd->hid_lock);
 
 	return res;
+}
+
+struct t_constellation_tracked_device_connection *
+wmr_hmd_add_tracked_controller(struct wmr_hmd *hmd,
+                               struct xrt_device *xdev,
+                               struct t_constellation_tracked_device_callbacks *cb)
+{
+	if (hmd->controller_tracker != NULL) {
+		return t_constellation_tracker_add_device(hmd->controller_tracker, xdev, cb);
+	}
+	return NULL;
 }

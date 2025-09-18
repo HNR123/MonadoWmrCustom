@@ -14,15 +14,16 @@
 
 #pragma once
 
-#include "tracking/t_tracking.h"
-#include "xrt/xrt_device.h"
-#include "xrt/xrt_frame.h"
-#include "xrt/xrt_prober.h"
 #include "os/os_threading.h"
 #include "math/m_imu_3dof.h"
+#include "tracking/t_tracking.h"
+#include "tracking/t_constellation_tracking.h"
 #include "util/u_logging.h"
 #include "util/u_distortion_mesh.h"
 #include "util/u_var.h"
+#include "xrt/xrt_device.h"
+#include "xrt/xrt_frame.h"
+#include "xrt/xrt_prober.h"
 
 #include "wmr_protocol.h"
 #include "wmr_config.h"
@@ -149,8 +150,13 @@ struct wmr_hmd
 		//! an equivalent for hand tracking.
 		struct xrt_tracked_slam *slam;
 
+		struct xrt_slam_sinks *slam_sinks;
+
 		//! Calibration data for SLAM
 		struct t_slam_calibration slam_calib;
+
+		//! Calibration data for constellation tracking
+		struct t_constellation_camera_group constellation_calib;
 
 		//! Set at start. Whether the SLAM tracker was initialized.
 		bool slam_enabled;
@@ -196,6 +202,8 @@ struct wmr_hmd
 	bool have_right_controller_status;
 
 	struct wmr_hmd_controller_connection *controller[WMR_MAX_CONTROLLERS];
+
+	struct t_constellation_tracker *controller_tracker;
 };
 
 static inline struct wmr_hmd *
@@ -204,21 +212,36 @@ wmr_hmd(struct xrt_device *p)
 	return (struct wmr_hmd *)p;
 }
 
+static inline struct xrt_device *
+wmr_hmd_to_xrt_device(struct wmr_hmd *hmd)
+{
+	if (hmd) {
+		return &hmd->base;
+	}
+	return NULL;
+}
+
 void
 wmr_hmd_create(enum wmr_headset_type hmd_type,
                struct os_hid_device *hid_holo,
                struct os_hid_device *hid_ctrl,
                struct xrt_prober_device *dev_holo,
                enum u_logging_level log_level,
-               struct xrt_device **out_hmd,
+               struct wmr_hmd **out_hmd,
                struct xrt_device **out_handtracker,
-               struct xrt_device **out_left_controller,
-               struct xrt_device **out_right_controller);
+               struct wmr_controller_base **out_left_controller,
+               struct wmr_controller_base **out_right_controller);
 
 bool
 wmr_hmd_send_controller_packet(struct wmr_hmd *hmd, const uint8_t *buffer, uint32_t buf_size);
 int
 wmr_hmd_read_sync_from_controller(struct wmr_hmd *hmd, uint8_t *buffer, uint32_t buf_size, int timeout_ms);
+
+struct t_constellation_tracked_device_connection *
+wmr_hmd_add_tracked_controller(struct wmr_hmd *hmd,
+                               struct xrt_device *xdev,
+                               struct t_constellation_tracked_device_callbacks *cb);
+
 #ifdef __cplusplus
 }
 #endif
