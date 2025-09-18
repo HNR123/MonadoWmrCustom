@@ -390,7 +390,7 @@ submit_device_pose(struct t_constellation_tracker *ct,
 
 			struct xrt_quat blended;
 			math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, alpha, &blended);
-			*P_cam_obj->orientation = blended;
+			P_cam_obj->orientation = blended;
 			}
 		}
 	}
