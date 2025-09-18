@@ -375,7 +375,6 @@ submit_device_pose(struct t_constellation_tracker *ct,
 	         refine_pose.position.z);
 
 	if (num_inliers >= 6) {
-		if (pos_diff < max_pos_jump && rot_diff < max_rot_jump) {
 			float alpha = 0.2f;
 			// Position glätten
 			P_cam_obj->position.x = alpha * refine_pose.position.x + (1.0f - alpha) * P_cam_obj->position.x;
@@ -384,7 +383,6 @@ submit_device_pose(struct t_constellation_tracker *ct,
 
 			// Rotation glätten
 			math_quat_slerp(&P_cam_obj->orientation, &refine_pose.orientation, alpha, &P_cam_obj->orientation);
-			}
 		}
 
 	}
