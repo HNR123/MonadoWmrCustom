@@ -377,8 +377,7 @@ submit_device_pose(struct t_constellation_tracker *ct,
 	if (num_inliers >= 6) {
 		// --- Positionsdifferenz berechnen ---
 		struct xrt_vec3 diff;
-		math_vec3_subtract(&refine_pose.position, &P_cam_obj->position);
-		diff = refine_pose.position; // diff = refine - current
+		math_vec3_subtract(&refine_pose.position, &P_cam_obj->position, &diff); // diff = refine - current
 		float pos_diff = sqrtf(diff.x*diff.x + diff.y*diff.y + diff.z*diff.z);
 
 		// --- Orientierung: einfacher Winkel zwischen Quats (approx) ---
