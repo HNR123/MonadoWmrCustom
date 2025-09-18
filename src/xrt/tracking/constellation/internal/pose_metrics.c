@@ -161,12 +161,12 @@ get_visible_leds_and_bounds(struct xrt_pose *pose,
 {
 	struct xrt_vec3 led_out_positions[MAX_OBJECT_LEDS];
 	struct xrt_vec2 led_out_points[MAX_OBJECT_LEDS];
-	bool first_visible = true;
+	bool first_visible_led = true;
 	int i;
 	struct t_constellation_led *leds = led_model->leds;
 	const int num_leds = led_model->num_leds;
 
-	/* Project HMD LEDs into the distorted image space */
+	/* Project LEDs into the distorted image space */
 	if (!project_led_points(led_model, calib, pose, led_out_positions, led_out_points)) {
 		*num_visible_leds = 0;
 		return;
@@ -176,11 +176,16 @@ get_visible_leds_and_bounds(struct xrt_pose *pose,
 	 * using the larger X/Y focal length and LED's Z value */
 	double focal_length = MAX(calib->calib.fx, calib->calib.fy);
 
+	// pose is camera->device, I_pose is device->camera
+	struct xrt_pose P_obj_cam;
+	math_pose_invert(pose, &P_obj_cam);
+
 	/* Calculate the bounding box and visible LEDs */
 	*num_visible_leds = 0;
 	for (i = 0; i < num_leds; i++) {
 		struct xrt_vec2 *led_pos_px = led_out_points + i;
 		struct xrt_vec3 *led_pos_m = led_out_positions + i;
+		struct t_constellation_led *led = &leds[i];
 
 		/* LEDs behind the camera are not visible */
 		if (led_pos_m->z <= 0.0) {
@@ -193,7 +198,7 @@ get_visible_leds_and_bounds(struct xrt_pose *pose,
 
 		/* Calculate the expected size of an LED at this distance */
 		double led_radius_px = 4.0;
-		const double led_radius_mm = leds[i].radius_mm;
+		const double led_radius_mm = led->radius_mm;
 		led_radius_px = focal_length * led_radius_mm / led_pos_m->z / 1000.0;
 #if 0
 		printf("LED id %d led_radius_px %f = focal length %f led_radius %f Z = %f m\n",
@@ -226,6 +231,11 @@ get_visible_leds_and_bounds(struct xrt_pose *pose,
 			continue;
 		}
 
+		if (led_model->check_led_visibility &&
+		    !led_model->check_led_visibility(led_model, i, P_obj_cam.position)) {
+			continue;
+		}
+
 		struct pose_metrics_visible_led_info *led_info = visible_led_points + (*num_visible_leds);
 		led_info->led = leds + i;
 		led_info->pos_px = *led_pos_px;
@@ -236,16 +246,86 @@ get_visible_leds_and_bounds(struct xrt_pose *pose,
 		(*num_visible_leds)++;
 
 		/* Expand the bounding box */
-		if (first_visible) {
+		if (first_visible_led) {
 			bounds->left = led_pos_px->x - led_radius_px;
 			bounds->top = led_pos_px->y - led_radius_px;
 			bounds->right = led_pos_px->x + 2 * led_radius_px;
 			bounds->bottom = led_pos_px->y + 2 * led_radius_px;
-			first_visible = false;
+			first_visible_led = false;
 		} else {
 			expand_rect(bounds, led_pos_px->x - led_radius_px, led_pos_px->y - led_radius_px,
 			            2 * led_radius_px, 2 * led_radius_px);
 		}
+	}
+}
+
+static bool
+project_bounding_points(struct t_constellation_led_model *led_model,
+                        struct camera_model *calib,
+                        struct xrt_pose *P_cam_obj,
+                        struct xrt_vec3 *out_positions,
+                        struct xrt_vec2 *out_points)
+{
+	for (int i = 0; i < led_model->num_bounding_points; i++) {
+		struct xrt_vec3 *tmp = out_positions + i;
+		math_pose_transform_point(P_cam_obj, &led_model->bounding_points[i].pos, tmp);
+		if (!t_camera_models_project(&calib->calib, tmp->x, tmp->y, tmp->z, &out_points[i].x,
+		                             &out_points[i].y)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void
+pose_metrics_get_device_bounds(struct xrt_pose *P_cam_obj,
+                               struct t_constellation_led_model *led_model,
+                               struct camera_model *calib,
+                               struct pose_rect *device_bounds,
+                               struct xrt_vec2 *visible_points,
+                               size_t *num_visible_points)
+{
+	bool first_visible_bounding_point = true;
+
+	if (num_visible_points)
+		*num_visible_points = 0;
+
+	struct xrt_vec3 bounding_out_positions[MAX_OBJECT_LEDS];
+	struct xrt_vec2 bounding_out_points[MAX_OBJECT_LEDS];
+
+	const int num_bounding_points = led_model->num_bounding_points;
+	/* Project device bounding points into the distorted image space */
+	bool bounding_points_valid =
+	    project_bounding_points(led_model, calib, P_cam_obj, bounding_out_positions, bounding_out_points);
+
+	*device_bounds = (struct pose_rect){0, 0, 0, 0};
+
+	for (int i = 0; i < num_bounding_points && bounding_points_valid; i++) {
+		struct xrt_vec2 *point_pos_px = bounding_out_points + i;
+		struct xrt_vec3 *point_pos_m = bounding_out_positions + i;
+
+		// skip points behind the camera
+		if (point_pos_m->z <= 0) {
+			continue;
+		}
+
+		if (visible_points && num_visible_points)
+			visible_points[(*num_visible_points)++] = *point_pos_px;
+
+		struct xrt_vec2 clamped_pos = {CLAMP(point_pos_px->x, 0, calib->width - 1),
+		                               CLAMP(point_pos_px->y, 0, calib->height - 1)};
+
+		if (first_visible_bounding_point) {
+			*device_bounds = (struct pose_rect){
+			    .top = clamped_pos.y,
+			    .bottom = clamped_pos.y,
+			    .left = clamped_pos.x,
+			    .right = clamped_pos.x,
+			};
+		} else
+			expand_rect(device_bounds, clamped_pos.x, clamped_pos.y, 0, 0);
+
+		first_visible_bounding_point = false;
 	}
 }
 
