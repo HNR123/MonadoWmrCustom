@@ -579,8 +579,6 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	double prediction_s = time_ns_to_s(prediction_ns);
 
 	m_predict_relation(&relation, prediction_s, out_relation);
-	m_filter_euro_vec3_run(&wcb->pos_filter, at_timestamp_ns, &out_relation->pose.position, &out_relation->pose.position);
-	m_filter_euro_quat_run(&wcb->rot_filter, at_timestamp_ns, &out_relation->pose.orientation, &out_relation->pose.orientation);
 	wcb->pose = out_relation->pose;
 
 	return XRT_SUCCESS;
@@ -677,8 +675,6 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	wcb->thumbstick_deadzone = 0.15;
 
 	m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
-	m_filter_euro_vec3_init(&wcb->pos_filter, 30.0, 10.0, 0.01);
-	m_filter_euro_quat_init(&wcb->rot_filter, 30.0, 10.0, 0.01);
 
 	if (os_mutex_init(&wcb->conn_lock) != 0 || os_mutex_init(&wcb->data_lock) != 0) {
 		WMR_ERROR(wcb, "WMR Controller: Failed to init mutex!");
