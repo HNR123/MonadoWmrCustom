@@ -23,6 +23,8 @@
 #include "tracking/t_led_models.h"
 #include "tracking/t_constellation_tracking.h"
 
+#include "math/m_filter.h"
+
 #include "wmr_common.h"
 #include "wmr_controller_protocol.h"
 #include "wmr_config.h"
@@ -198,15 +200,12 @@ struct wmr_controller_base
 	struct m_imu_3dof fusion;
 	//! The last angular velocity from the IMU, for prediction.
 	struct xrt_vec3 last_angular_velocity;
-	//! The last linear velocity from the IMU, for prediction.
-	struct xrt_vec3 last_linear_velocity;
-	//! Time of last pose that was smoothed, in CPU time.
-	uint64_t last_pose_ts;
 
-	//! Second to last timestamp of tracked pose from optical controller tracking
-	timepoint_ns last_last_tracked_pose_ts;
-	//! Second to last tracked pose from optical controller tracking
-	struct xrt_pose last_last_tracked_pose;
+	//! Low-pass filter for position.
+	struct m_low_pass_filter_vec3 pos_filter;
+
+	//! Low-pass filter for angular velocity.
+	struct m_low_pass_filter_vec3 ang_vel_filter;
 };
 
 bool
