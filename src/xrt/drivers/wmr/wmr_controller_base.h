@@ -22,8 +22,7 @@
 #include "xrt/xrt_device.h"
 #include "tracking/t_led_models.h"
 #include "tracking/t_constellation_tracking.h"
-
-#include "math/m_filter.h"
+#include "math/m_filter_one_euro.h" // Added for one euro filter
 
 #include "wmr_common.h"
 #include "wmr_controller_protocol.h"
@@ -201,11 +200,8 @@ struct wmr_controller_base
 	//! The last angular velocity from the IMU, for prediction.
 	struct xrt_vec3 last_angular_velocity;
 
-	//! Low-pass filter for position.
-	struct m_low_pass_filter_vec3 pos_filter;
-
-	//! Low-pass filter for angular velocity.
-	struct m_low_pass_filter_vec3 ang_vel_filter;
+	struct m_filter_euro_vec3 pos_filter;
+	struct m_filter_euro_quat rot_filter;
 };
 
 bool

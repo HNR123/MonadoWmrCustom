@@ -562,15 +562,8 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	last_imu_timestamp_ns = wcb->last_imu_timestamp_ns;
 
 	if (wcb->last_tracked_pose_ts != 0) {
-		m_filter_low_pass_vec3_update(&wcb->pos_filter, &wcb->last_tracked_pose.position, &relation.pose.position);
-	} else {
-		m_filter_low_pass_vec3_init(&wcb->pos_filter, 0.2f);
-		wcb->pos_filter.val = wcb->last_tracked_pose.position;
 		relation.pose.position = wcb->last_tracked_pose.position;
 	}
-
-	m_filter_low_pass_vec3_update(&wcb->ang_vel_filter, &wcb->last_angular_velocity, &relation.angular_velocity);
-
 	os_mutex_unlock(&wcb->data_lock);
 
 	m_relation_chain_push_relation(&xrc, &relation);
@@ -586,6 +579,8 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	double prediction_s = time_ns_to_s(prediction_ns);
 
 	m_predict_relation(&relation, prediction_s, out_relation);
+	m_filter_euro_vec3_run(&wcb->pos_filter, at_timestamp_ns, &out_relation->pose.position, &out_relation->pose.position);
+	m_filter_euro_quat_run(&wcb->rot_filter, at_timestamp_ns, &out_relation->pose.orientation, &out_relation->pose.orientation);
 	wcb->pose = out_relation->pose;
 
 	return XRT_SUCCESS;
@@ -682,14 +677,13 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	wcb->thumbstick_deadzone = 0.15;
 
 	m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
+	m_filter_euro_vec3_init(&wcb->pos_filter, 30.0, 10.0, 0.01);
+	m_filter_euro_quat_init(&wcb->rot_filter, 30.0, 10.0, 0.01);
 
 	if (os_mutex_init(&wcb->conn_lock) != 0 || os_mutex_init(&wcb->data_lock) != 0) {
 		WMR_ERROR(wcb, "WMR Controller: Failed to init mutex!");
 		return false;
 	}
-
-	m_filter_low_pass_vec3_init(&wcb->pos_filter, 0.2f);
-	m_filter_low_pass_vec3_init(&wcb->ang_vel_filter, 0.2f);
 
 	/* Send init commands */
 	struct wmr_controller_fw_cmd fw_cmd = {
@@ -1143,21 +1137,35 @@ wmr_controller_base_push_observed_pose(struct xrt_device *xdev, timepoint_ns fra
 		math_quat_unrotate(&wcb->fusion.rot, &pose->orientation, &delta);
 		delta.x = delta.z = 0.0; // We only want Yaw
 
-		// Always apply a consistent, smaller correction.
-		delta.y = 0.10 * delta.y; // 10% correction
-		math_quat_normalize(&delta);
+		if (fabs(delta.y) > sin(DEG_TO_RAD(5)) / 2) {
+			delta.y = sin(0.10 * asinf(delta.y)); // 10% correction
+			math_quat_normalize(&delta);
 
-		struct xrt_quat prev = wcb->fusion.rot;
-		math_quat_rotate(&wcb->fusion.rot, &delta, &wcb->fusion.rot);
+			struct xrt_quat prev = wcb->fusion.rot;
+			math_quat_rotate(&wcb->fusion.rot, &delta, &wcb->fusion.rot);
 
-		if (wcb->log_level <= U_LOGGING_DEBUG) {
-			WMR_DEBUG(wcb,
-			          "Applying delta yaw rotation of %f degrees delta quat %f,%f,%f,%f from "
-			          "%f,%f,%f,%f to "
-			          "%f,%f,%f,%f.",
-			          RAD_TO_DEG(2 * asinf(delta.y)), delta.x, delta.y, delta.z, delta.w, prev.x,
-			          prev.y, prev.z, prev.w, wcb->fusion.rot.x, wcb->fusion.rot.y,
-			          wcb->fusion.rot.z, wcb->fusion.rot.w);
+			if (wcb->log_level <= U_LOGGING_DEBUG) {
+				struct xrt_quat post_delta;
+				math_quat_unrotate(&wcb->fusion.rot, &pose->orientation, &post_delta);
+				post_delta.x = post_delta.z = 0.0;  // We only want Yaw
+				post_delta.y = 0.10 * post_delta.y; // 5%
+				math_quat_normalize(&post_delta);
+
+				WMR_DEBUG(wcb,
+				          "Applying delta yaw rotation of %f degrees delta quat %f,%f,%f,%f from "
+				          "%f,%f,%f,%f to "
+				          "%f,%f,%f,%f. delta after correction: %f,%f,%f,%f",
+				          RAD_TO_DEG(2 * asinf(delta.y)), delta.x, delta.y, delta.z, delta.w, prev.x,
+				          prev.y, prev.z, prev.w, wcb->fusion.rot.x, wcb->fusion.rot.y,
+				          wcb->fusion.rot.z, wcb->fusion.rot.w, post_delta.x, post_delta.y,
+				          post_delta.z, post_delta.w);
+			}
+		} else {
+			math_quat_normalize(&delta);
+
+			WMR_DEBUG(wcb, "Applying full yaw correction of %f degrees. delta quat %f,%f,%f,%f",
+			          RAD_TO_DEG(2 * asinf(delta.y)), delta.x, delta.y, delta.z, delta.w);
+			math_quat_rotate(&wcb->fusion.rot, &delta, &wcb->fusion.rot);
 		}
 #else
 		wcb->fusion.rot = pose->orientation;
