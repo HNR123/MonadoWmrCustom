@@ -62,7 +62,6 @@ wmr_controller_base(struct xrt_device *p)
 {
 	return (struct wmr_controller_base *)p;
 }
-
 /* Called from subclasses' handle_input_packet method, with data_lock */
 void
 wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
@@ -102,6 +101,7 @@ wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
 		wcb->last_imu_device_timestamp_ns = 0;
 		m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 		m_clock_windowed_skew_tracker_reset(wcb->hw2mono_clock);
+		// TODO: LED flashes go out of sync when this happens still..
 		m_clock_windowed_skew_tracker_push(wcb->hw2mono_clock, rx_mono_ns, now_hw_ns);
 		return;
 	}
@@ -115,11 +115,194 @@ wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
 	}
 
 	m_imu_3dof_update(&wcb->fusion, mono_time_ns, &imu_sample->acc, &imu_sample->gyro);
+	long last_last_imu_timestamp_ns = wcb->last_imu_timestamp_ns;
 	wcb->last_imu_timestamp_ns = mono_time_ns;
 	wcb->last_imu_device_timestamp_ns = now_hw_ns;
 	wcb->last_angular_velocity = imu_sample->gyro;
 	wcb->last_imu = *imu_sample;
+
+#if 1
+	if (wcb->update_yaw_from_optical && wcb->last_tracked_pose_ts != 0 &&
+	    m_vec3_len_sqrd(wcb->last_angular_velocity) >
+	        0.2) { // Only adjust while the controller is rotating signficantly
+		// Smoothly apply of observed orientation yaw to 3dof fusion
+		struct xrt_quat delta;
+		math_quat_unrotate(&wcb->fusion.rot, &wcb->last_tracked_pose.orientation, &delta);
+		delta.x = delta.z = 0.0; // We only want Yaw
+
+
+		// delta.y = sin(0.10 * asinf(delta.y)); // 10% correction
+		math_quat_normalize(&delta);
+
+		struct xrt_quat prev = wcb->fusion.rot;
+		struct xrt_quat post_delta;
+		math_quat_rotate(&wcb->fusion.rot, &delta, &post_delta);
+
+		// Smoothing
+		// Always towards last optically observed yaw (not sure if this will cause issues)
+		// float t = math_map_ranges(mono_time_ns - wcb->last_imu_timestamp_ns, 0., U_TIME_1MS_IN_NS * 11, 1.,
+		// 0.);
+		double t = 1. - exp(-0.03 * (mono_time_ns - last_last_imu_timestamp_ns) /
+		                    U_TIME_1MS_IN_NS); // TODO: Make lambda tuneable from the GUI
+
+		// printf("%u: yaw lerp t %f \t %lu \n", wcb->base.device_type, t,
+		//        mono_time_ns - last_last_imu_timestamp_ns);
+		t = t < 0. ? 0. : t; // Min
+		t = t > 1. ? 1. : t; // Max
+		// t *= t;
+		math_quat_normalize(&wcb->fusion.rot); // Just in case
+		math_quat_normalize(&post_delta);
+		math_quat_slerp(&wcb->fusion.rot, &post_delta, t,
+		                &wcb->fusion.rot); // Exp smoothing will never actually reach the optical yaw, not sure
+		                                   // if this is a problem, but it IS framerate independent.
+
+		// FIXME: The math here is probably wrong now
+		if (wcb->log_level <= U_LOGGING_DEBUG) {
+			struct xrt_quat post_smoothed_delta;
+			math_quat_unrotate(&wcb->fusion.rot, &wcb->last_tracked_pose.orientation, &post_smoothed_delta);
+			post_smoothed_delta.x = post_smoothed_delta.z = 0.0; // We only want Yaw
+			math_quat_normalize(&post_smoothed_delta);
+
+			WMR_DEBUG(wcb,
+			          "Applying delta yaw rotation of %f degrees delta quat %f,%f,%f,%f from "
+			          "%f,%f,%f,%f to "
+			          "%f,%f,%f,%f. delta after correction: %f,%f,%f,%f",
+			          RAD_TO_DEG(2 * asinf(delta.y)), delta.x, delta.y, delta.z, delta.w, prev.x, prev.y,
+			          prev.z, prev.w, wcb->fusion.rot.x, wcb->fusion.rot.y, wcb->fusion.rot.z,
+			          wcb->fusion.rot.w, post_smoothed_delta.x, post_smoothed_delta.y,
+			          post_smoothed_delta.z, post_smoothed_delta.w);
+		}
+	}
+#endif
+
+#if 1
+	// Velocity from IMU
+	if (last_last_imu_timestamp_ns != mono_time_ns) {
+		struct xrt_vec3 world_accel = {0};
+		math_quat_rotate_vec3(&wcb->fusion.rot, &wcb->fusion.last.accel, &world_accel);
+		const struct xrt_vec3 G = {0., 9.81, 0.};
+		math_vec3_subtract(&G, &world_accel);
+		math_vec3_scalar_mul(time_ns_to_s(wcb->last_imu_timestamp_ns - last_last_imu_timestamp_ns),
+		                     &world_accel);
+
+		// printf("%u: %lu : %f \n", wcb->base.device_type,
+		//        wcb->last_imu_timestamp_ns - last_last_imu_timestamp_ns,
+		//        (wcb->last_imu_timestamp_ns - last_last_imu_timestamp_ns) / (1. * U_TIME_1S_IN_NS));
+
+		// Slowly stop apply velocity when dead reckoning based on how long it's been since the controllers were
+		// last seen by a camera
+		double t = math_map_ranges(time_ns_to_s(mono_time_ns - wcb->last_tracked_pose_ts), 0.011, 10.0, 0.,
+		                           1.); // TODO: Make tunable from the debug GUI
+		// printf("%u: IMU vel lerp to 0 t %f \t %lu \n", wcb->base.device_type, t,
+		//        mono_time_ns - wcb->last_tracked_pose_ts);
+		t = t < 0. ? 0. : t; // Min
+		t = t > 1. ? 1. : t; // Max
+		world_accel = m_vec3_lerp(world_accel, wcb->last_linear_velocity, t * t);
+
+		wcb->last_linear_velocity = world_accel;
+		// printf("%u: vel %f %f %f\n", wcb->base.device_type, wcb->last_linear_velocity.x,
+		//        wcb->last_linear_velocity.y, wcb->last_linear_velocity.z);
+	}
+#endif
+	if (wcb->last_tracked_pose_ts != 0) {
+
+		struct xrt_space_relation relation = {0};
+		relation.relation_flags = (enum xrt_space_relation_flags)(
+		    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
+		    XRT_SPACE_RELATION_POSITION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT |
+		    XRT_SPACE_RELATION_ANGULAR_VELOCITY_VALID_BIT | XRT_SPACE_RELATION_LINEAR_VELOCITY_VALID_BIT);
+
+		// Start with the static pose above, then apply IMU + tracking
+		relation.pose = wcb->pose;
+
+		relation.angular_velocity = wcb->last_angular_velocity;
+		relation.linear_velocity = wcb->last_linear_velocity;
+		relation.pose.orientation = wcb->fusion.rot;
+		relation.pose.position = wcb->pose.position;
+#if 1
+
+		// Adjust pose based on IMU
+		m_predict_relation(&relation, time_ns_to_s(wcb->last_imu_timestamp_ns - last_last_imu_timestamp_ns),
+		                   &relation);
+
+#endif
+
+#if 1
+		// Smoothing
+		// float t = math_map_ranges(mono_time_ns - wcb->last_pose_ts, 0., U_TIME_1MS_IN_NS * 11 * 10, 1., 0.);
+		double t = 1. - exp(-100 * time_ns_to_s(mono_time_ns -
+		                                        wcb->last_pose_ts)); // TODO: Make lambda tuneable from the GUI
+
+		// printf("%u: pos lerp t %f \t %lu \n", wcb->base.device_type, t, mono_time_ns - wcb->last_pose_ts);
+		t = t < 0. ? 0. : t; // Min
+		t = t > 1. ? 1. : t; // Max
+		relation.pose.position = m_vec3_lerp(wcb->pose.position, relation.pose.position, t);
+#endif
+
+		if (wcb->last_pose_ts < mono_time_ns) {
+			wcb->pose.position = relation.pose.position;
+			wcb->last_pose_ts = mono_time_ns;
+		}
+	}
 }
+
+/* Called from subclasses' handle_input_packet method, with data_lock */
+// void
+// wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
+//                                struct wmr_controller_base_imu_sample *imu_sample,
+//                                timepoint_ns rx_mono_ns)
+// {
+// 	/* Extend 32-bit tick count to 64-bit and convert to ns */
+// 	uint32_t tick_delta = imu_sample->timestamp_ticks - (uint32_t)wcb->last_timestamp_ticks;
+// 	wcb->last_timestamp_ticks += tick_delta;
+
+// 	timepoint_ns now_hw_ns = wcb->last_timestamp_ticks * WMR_MOTION_CONTROLLER_NS_PER_TICK;
+
+// 	/* Update windowed min-skew estimator and convert hardware timestamp into monotonic clock */
+// 	m_clock_windowed_skew_tracker_push(wcb->hw2mono_clock, rx_mono_ns, now_hw_ns);
+
+// 	timepoint_ns mono_time_ns;
+// 	if (!m_clock_windowed_skew_tracker_to_local(wcb->hw2mono_clock, now_hw_ns, &mono_time_ns)) {
+// 		WMR_DEBUG(wcb,
+// 		          "Dropping IMU sample until clock estimator synchronises. Rcv ts %" PRIu64 " hw ts %" PRIu64,
+// 		          rx_mono_ns, now_hw_ns);
+// 		return;
+// 	}
+
+// 	/*
+// 	 * Check if the timepoint does time travel, we get one or two
+// 	 * old samples when the device has not been cleanly shut down,
+// 	 * and if the controller is left idle and goes into low power
+// 	 * mode it can come back with a different clock epoch
+// 	 */
+// 	if (wcb->last_imu_timestamp_ns > (uint64_t)mono_time_ns) {
+// 		WMR_WARN(wcb,
+// 		         "Received sample from the past, new: %" PRIu64 ", last: %" PRIu64 ", diff: %" PRIu64
+// 		         ". resetting clock tracking",
+// 		         mono_time_ns, now_hw_ns, mono_time_ns - now_hw_ns);
+// 		// Reinit. The 3dof fusion will assert if time goes backward
+// 		wcb->last_imu_timestamp_ns = 0;
+// 		wcb->last_imu_device_timestamp_ns = 0;
+// 		m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
+// 		m_clock_windowed_skew_tracker_reset(wcb->hw2mono_clock);
+// 		m_clock_windowed_skew_tracker_push(wcb->hw2mono_clock, rx_mono_ns, now_hw_ns);
+// 		return;
+// 	}
+
+// 	float accel_m_p_s_2 = m_vec3_len(imu_sample->acc);
+// 	WMR_TRACE(wcb, "Accel [m/s^2] : %f", accel_m_p_s_2);
+
+// 	// if it accelerates quite quickly, then we up the brightness to make it easier to find constellation poses
+// 	if (accel_m_p_s_2 > 20) {
+// 		wcb->timesync_led_intensity = MIN(wcb->timesync_led_intensity + 10, 399);
+// 	}
+
+// 	m_imu_3dof_update(&wcb->fusion, mono_time_ns, &imu_sample->acc, &imu_sample->gyro);
+// 	wcb->last_imu_timestamp_ns = mono_time_ns;
+// 	wcb->last_imu_device_timestamp_ns = now_hw_ns;
+// 	wcb->last_angular_velocity = imu_sample->gyro;
+// 	wcb->last_imu = *imu_sample;
+// }
 
 static void
 wmr_controller_base_send_timesync(struct wmr_controller_base *wcb);
