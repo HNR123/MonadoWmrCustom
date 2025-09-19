@@ -198,6 +198,15 @@ struct wmr_controller_base
 	struct m_imu_3dof fusion;
 	//! The last angular velocity from the IMU, for prediction.
 	struct xrt_vec3 last_angular_velocity;
+	//! The last linear velocity from the IMU, for prediction.
+	struct xrt_vec3 last_linear_velocity;
+	//! Time of last pose that was smoothed, in CPU time.
+	uint64_t last_pose_ts;
+
+	//! Second to last timestamp of tracked pose from optical controller tracking
+	timepoint_ns last_last_tracked_pose_ts;
+	//! Second to last tracked pose from optical controller tracking
+	struct xrt_pose last_last_tracked_pose;
 };
 
 bool
